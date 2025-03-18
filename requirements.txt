@@ -1,0 +1,8 @@
+flask
+netmiko
+paramiko
+textfsm
+ntc-templates
+requests
+beautifulsoup4
+werkzeug

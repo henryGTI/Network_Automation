@@ -1,0 +1,59 @@
+{
+    "cisco": {
+        "vlan_create": "vlan {vlan_id}",
+        "vlan_name": "name {vlan_name}",
+        "interface_access": "switchport mode access\nswitchport access vlan {vlan_id}",
+        "interface_trunk": "switchport mode trunk\nswitchport trunk allowed vlan {vlan_list}",
+        "ip_config": "ip address {ip_address} {subnet_mask}",
+        "routing_ospf": "router ospf {process_id}\nnetwork {network} area {area}",
+        "routing_eigrp": "router eigrp {as_number}\nnetwork {network}",
+        "routing_bgp": "router bgp {as_number}\nneighbor {neighbor} remote-as {remote_as}",
+        "acl_rule": "access-list {acl_id} {action} {source} {destination}",
+        "port_security": "switchport port-security\nswitchport port-security maximum {max_mac}",
+        "backup_config": "show running-config",
+        "restore_config": "copy {config_file} running-config"
+    },
+    "juniper": {
+        "vlan_create": "set vlans {vlan_name} vlan-id {vlan_id}",
+        "interface_access": "set interfaces {interface} unit 0 family ethernet-switching vlan members {vlan_id}",
+        "interface_trunk": "set interfaces {interface} unit 0 family ethernet-switching port-mode trunk\nset interfaces {interface} unit 0 family ethernet-switching vlan members [{vlan_list}]",
+        "ip_config": "set interfaces {interface} unit 0 family inet address {ip_address}/{prefix_length}",
+        "routing_ospf": "set protocols ospf area {area} interface {interface}",
+        "backup_config": "show configuration | display set",
+        "restore_config": "load merge {config_file}"
+    },
+    "hp": {
+        "vlan_create": "vlan {vlan_id}",
+        "vlan_name": "name {vlan_name}",
+        "interface_access": "untagged {interface}",
+        "interface_trunk": "tagged {interface}",
+        "ip_config": "ip address {ip_address} {subnet_mask}",
+        "backup_config": "show running-config",
+        "restore_config": "copy {config_file} running-config"
+    },
+    "arista": {
+        "vlan_create": "vlan {vlan_id}",
+        "vlan_name": "name {vlan_name}",
+        "interface_access": "switchport access vlan {vlan_id}",
+        "interface_trunk": "switchport trunk allowed vlan {vlan_list}",
+        "ip_config": "ip address {ip_address}/{prefix_length}",
+        "backup_config": "show running-config",
+        "restore_config": "copy {config_file} running-config"
+    },
+    "coreedge": {
+        "vlan_create": "create vlan {vlan_name} tag {vlan_id}",
+        "interface_access": "config vlan {vlan_name} add untagged {interface}",
+        "interface_trunk": "config vlan {vlan_name} add tagged {interface}",
+        "ip_config": "config interface ip {interface} {ip_address} {subnet_mask}",
+        "backup_config": "show config",
+        "restore_config": "load config {config_file}"
+    },
+    "handreamnet": {
+        "vlan_create": "vlan database\nvlan {vlan_id} name {vlan_name}",
+        "interface_access": "switchport access vlan {vlan_id}",
+        "interface_trunk": "switchport trunk allowed vlan {vlan_list}",
+        "ip_config": "ip address {ip_address} {subnet_mask}",
+        "backup_config": "show running-config",
+        "restore_config": "copy {config_file} running-config"
+    }
+}
