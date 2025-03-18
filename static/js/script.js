@@ -133,7 +133,7 @@ const elements = {
 };
 
 // 전역 범위에서 모든 함수들을 먼저 정의
-function handleCreateScript(event) {
+async function handleCreateScript(event) {
     event.preventDefault();
     try {
         const deviceName = document.getElementById('deviceName')?.value;
@@ -148,16 +148,27 @@ function handleCreateScript(event) {
             throw new Error('최소한 하나의 작업을 선택해주세요.');
         }
 
+        const data = {
+            device_name: deviceName,
+            vendor: vendor,
+            tasks: tasks
+        };
+
+        if (document.getElementById('ipConfig')?.checked) {
+            data.tasks.ip_config = {
+                enabled: true,
+                interface_name: document.getElementById('ipInterface')?.value,
+                ip_address: document.getElementById('scriptIpAddress')?.value,
+                subnet_mask: document.getElementById('subnetMask')?.value
+            };
+        }
+
         fetch('/api/devices/script', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                device_name: deviceName,
-                vendor: vendor,
-                tasks: tasks
-            })
+            body: JSON.stringify(data)
         })
         .then(response => {
             if (!response.ok) {
@@ -258,68 +269,48 @@ function collectTasks() {
     return tasks;
 }
 
-function loadDeviceList() {
-    fetch('/api/devices')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('장비 목록을 불러오는데 실패했습니다.');
-            }
-            return response.json();
-        })
-        .then(devices => {
-            console.log('로드된 장비 목록:', devices);
-            updateDeviceTable(devices);
-        })
-        .catch(error => {
-            console.error('장비 목록 로드 오류:', error);
-            const errorDiv = document.getElementById('errorMessage');
-            if (errorDiv) {
-                errorDiv.textContent = error.message;
-                errorDiv.style.display = 'block';
-            }
-        });
+async function loadDeviceList() {
+    try {
+        const response = await fetch('/api/devices');
+        if (!response.ok) {
+            throw new Error('장비 목록을 가져오는데 실패했습니다.');
+        }
+        
+        const data = await response.json();
+        console.log('로드된 장비 목록:', data);
+
+        // 데이터가 배열이 아닌 경우 처리
+        const devices = Array.isArray(data) ? data : (data.devices || []);
+        
+        updateDeviceTable(devices);
+    } catch (error) {
+        console.error('장비 목록 로드 오류:', error);
+        updateDeviceTable([]); // 빈 배열로 테이블 업데이트
+    }
 }
 
 function updateDeviceTable(devices) {
-    const deviceTableBody = document.getElementById('deviceTableBody');
-    if (!deviceTableBody) {
-        console.error('deviceTableBody 요소를 찾을 수 없습니다.');
+    const tableBody = document.getElementById('deviceTableBody');
+    if (!tableBody) {
+        console.error('장비 목록 테이블을 찾을 수 없습니다.');
         return;
     }
-
-    deviceTableBody.innerHTML = '';
 
     if (devices.length === 0) {
-        const row = deviceTableBody.insertRow();
-        const cell = row.insertCell();
-        cell.colSpan = 4;
-        cell.textContent = '저장된 장비가 없습니다.';
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="3" class="text-center">등록된 장비가 없습니다.</td>
+            </tr>`;
         return;
     }
 
-    devices.forEach(device => {
-        const row = deviceTableBody.insertRow();
-        
-        // 장비 이름
-        const nameCell = row.insertCell();
-        nameCell.textContent = device.device_name || '이름 없음';
-        
-        // 벤더
-        const vendorCell = row.insertCell();
-        vendorCell.textContent = device.vendor || '정보 없음';
-        
-        // 생성일
-        const dateCell = row.insertCell();
-        dateCell.textContent = device.created_at ? new Date(device.created_at).toLocaleString() : '정보 없음';
-        
-        // 작업 버튼
-        const actionCell = row.insertCell();
-        actionCell.innerHTML = `
-            <button onclick="viewDevice('${device.device_name}')" class="btn btn-info btn-sm">보기</button>
-            <button onclick="executeScript('${device.device_name}')" class="btn btn-success btn-sm">실행</button>
-            <button onclick="deleteDevice('${device.device_name}')" class="btn btn-danger btn-sm">삭제</button>
-        `;
-    });
+    tableBody.innerHTML = devices.map((device, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${device.device_name || '-'}</td>
+            <td>${device.vendor || '-'}</td>
+        </tr>
+    `).join('');
 }
 
 // 페이지 초기화 함수
@@ -600,4 +591,120 @@ function showError(message) {
     } else {
         alert(message);
     }
-} 
+}
+
+async function validateData(data) {
+    try {
+        const response = await fetch('/api/validate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (result.status === 'success') {
+            alert('데이터가 유효합니다.');
+        } else {
+            alert('데이터 검증 중 오류가 발생했습니다: ' + result.message);
+        }
+    } catch (error) {
+        console.error('데이터 검증 중 오류:', error);
+        alert('데이터 검증 중 오류가 발생했습니다: ' + error.message);
+    }
+}
+
+async function handleAutoLearning(event) {
+    event.preventDefault();
+    try {
+        const vendor = document.getElementById('learningVendor').value;
+
+        if (!vendor) {
+            alert('벤더를 선택해주세요.');
+            return;
+        }
+
+        const data = {
+            vendor: vendor
+        };
+
+        // 로딩 표시
+        const commandList = document.getElementById('commandList');
+        commandList.innerHTML = `
+            <div class="text-center my-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">자동학습 중입니다...</p>
+            </div>
+        `;
+
+        const response = await fetch('/api/auto-learning', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.message || '자동학습 처리 실패');
+        }
+
+        // 결과 표시
+        if (commandList) {
+            let html = `
+                <div class="alert alert-success mb-4">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    ${vendor.toUpperCase()} 장비 자동학습이 완료되었습니다.
+                </div>
+                <div class="row row-cols-1 row-cols-md-2 g-4">
+            `;
+            
+            for (const [taskName, taskInfo] of Object.entries(result.tasks)) {
+                html += `
+                    <div class="col">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-header bg-light">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-gear-fill me-2"></i>
+                                    ${taskInfo.name}
+                                </h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="list-group list-group-flush">
+                                    ${taskInfo.show_commands.map(cmd => 
+                                        `<div class="list-group-item">
+                                            <code class="text-primary">${cmd}</code>
+                                        </div>`
+                                    ).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            commandList.innerHTML = html;
+        }
+        
+    } catch (error) {
+        console.error('자동학습 처리 오류:', error);
+        const commandList = document.getElementById('commandList');
+        if (commandList) {
+            commandList.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    ${error.message}
+                </div>
+            `;
+        }
+    }
+}
+
+// 이벤트 리스너 등록
+document.getElementById('autoLearningBtn')?.addEventListener('click', handleAutoLearning); 

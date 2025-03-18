@@ -2,8 +2,13 @@ import os
 import json
 from flask import jsonify, Flask, request, render_template
 from datetime import datetime
+import logging
 
 app = Flask(__name__)
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # 디렉토리 경로 설정
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +22,487 @@ for directory in [TASKS_DIR, DEVICE_SCRIPTS_DIR]:
 
 # 전역 변수
 devices = {}
+
+# 벤더별 명령어 패턴 정의
+VENDOR_COMMANDS = {
+    'cisco': {
+        'vlan_config': {
+            'show_commands': [
+                'show vlan brief',
+                'show vlan',
+                'show running-config | section vlan'
+            ],
+            'patterns': {
+                'vlan_id': r'vlan (\d+)',
+                'vlan_name': r'name (.+)'
+            }
+        },
+        'interface_config': {
+            'show_commands': [
+                'show interfaces status',
+                'show interfaces description',
+                'show running-config | section interface'
+            ],
+            'patterns': {
+                'interface_name': r'interface (.+)',
+                'description': r'description (.+)',
+                'status': r'(shutdown|no shutdown)'
+            }
+        },
+        'vlan_interface': {
+            'show_commands': [
+                'show interfaces switchport',
+                'show vlan',
+                'show interfaces trunk'
+            ],
+            'patterns': {
+                'interface_name': r'interface (.+)',
+                'mode': r'switchport mode (.+)',
+                'vlan_id': r'switchport (access|trunk) vlan (\d+)'
+            }
+        },
+        'ip_config': {
+            'show_commands': [
+                'show ip interface brief',
+                'show running-config | section interface',
+                'show ip route'
+            ],
+            'patterns': {
+                'interface_name': r'interface (.+)',
+                'ip_address': r'ip address (\d+\.\d+\.\d+\.\d+)',
+                'subnet_mask': r'ip address \d+\.\d+\.\d+\.\d+ (\d+\.\d+\.\d+\.\d+)'
+            }
+        },
+        'routing_config': {
+            'show_commands': [
+                'show ip protocols',
+                'show ip route',
+                'show running-config | section router'
+            ],
+            'patterns': {
+                'protocol': r'router (\w+)',
+                'network': r'network (\d+\.\d+\.\d+\.\d+)',
+                'mask': r'mask (\d+\.\d+\.\d+\.\d+)'
+            }
+        },
+        'acl_config': {
+            'show_commands': [
+                'show access-lists',
+                'show running-config | section access-list',
+                'show ip access-lists'
+            ],
+            'patterns': {
+                'acl_name': r'ip access-list (\w+)',
+                'rule': r'permit|deny'
+            }
+        },
+        'qos_config': {
+            'show_commands': [
+                'show mls qos',
+                'show class-map',
+                'show policy-map',
+                'show mls qos interface'
+            ],
+            'patterns': {
+                'class_map': r'class-map (\w+)',
+                'policy_map': r'policy-map (\w+)'
+            }
+        },
+        'spanning_tree': {
+            'show_commands': [
+                'show spanning-tree',
+                'show spanning-tree summary',
+                'show spanning-tree detail'
+            ],
+            'patterns': {
+                'mode': r'spanning-tree mode (\w+)',
+                'priority': r'spanning-tree priority (\d+)'
+            }
+        },
+        'port_channel': {
+            'show_commands': [
+                'show etherchannel summary',
+                'show etherchannel port-channel',
+                'show running-config | section channel-group'
+            ],
+            'patterns': {
+                'group': r'channel-group (\d+)',
+                'mode': r'mode (\w+)'
+            }
+        },
+        'dhcp_config': {
+            'show_commands': [
+                'show ip dhcp pool',
+                'show ip dhcp binding',
+                'show running-config | section dhcp'
+            ],
+            'patterns': {
+                'pool_name': r'ip dhcp pool (\w+)',
+                'network': r'network (\d+\.\d+\.\d+\.\d+)'
+            }
+        }
+    },
+    'hp': {
+        'vlan_config': {
+            'show_commands': [
+                'show vlans',
+                'show running-config vlan',
+                'display vlan all'
+            ]
+        },
+        'interface_config': {
+            'show_commands': [
+                'show interfaces brief',
+                'show interfaces all',
+                'display interface'
+            ]
+        },
+        'vlan_interface': {
+            'show_commands': [
+                'show interfaces',
+                'show vlan ports',
+                'display port vlan'
+            ]
+        },
+        'ip_config': {
+            'show_commands': [
+                'show ip',
+                'show ip interface',
+                'display ip interface brief'
+            ]
+        },
+        'routing_config': {
+            'show_commands': [
+                'show ip routing-protocol',
+                'show ip route',
+                'display ip routing-table'
+            ]
+        },
+        'acl_config': {
+            'show_commands': [
+                'show access-list',
+                'show running-config acl',
+                'display acl all'
+            ]
+        },
+        'qos_config': {
+            'show_commands': [
+                'show qos',
+                'show qos interface',
+                'display qos-interface'
+            ]
+        },
+        'spanning_tree': {
+            'show_commands': [
+                'show spanning-tree',
+                'show spanning-tree detail',
+                'display stp'
+            ]
+        },
+        'port_channel': {
+            'show_commands': [
+                'show trunk',
+                'show lacp',
+                'display link-aggregation summary'
+            ]
+        },
+        'dhcp_config': {
+            'show_commands': [
+                'show ip dhcp',
+                'show ip dhcp binding',
+                'display dhcp server'
+            ]
+        }
+    },
+    'arista': {
+        'vlan_config': {
+            'show_commands': [
+                'show vlan',
+                'show running-config vlan',
+                'show vlan internal usage'
+            ]
+        },
+        'interface_config': {
+            'show_commands': [
+                'show interfaces status',
+                'show interfaces description',
+                'show running-config interfaces'
+            ]
+        },
+        'vlan_interface': {
+            'show_commands': [
+                'show interfaces switchport',
+                'show vlan',
+                'show interfaces trunk'
+            ]
+        },
+        'ip_config': {
+            'show_commands': [
+                'show ip interface',
+                'show ip interface brief',
+                'show running-config section ip interface'
+            ]
+        },
+        'routing_config': {
+            'show_commands': [
+                'show ip route summary',
+                'show ip protocols',
+                'show running-config section router'
+            ]
+        },
+        'acl_config': {
+            'show_commands': [
+                'show ip access-lists',
+                'show running-config section ip access-list',
+                'show access-list counters'
+            ]
+        },
+        'qos_config': {
+            'show_commands': [
+                'show qos interfaces',
+                'show qos maps',
+                'show running-config section qos'
+            ]
+        },
+        'spanning_tree': {
+            'show_commands': [
+                'show spanning-tree',
+                'show spanning-tree blockedports',
+                'show spanning-tree detail'
+            ]
+        },
+        'port_channel': {
+            'show_commands': [
+                'show port-channel summary',
+                'show port-channel load-balance',
+                'show running-config section port-channel'
+            ]
+        },
+        'dhcp_config': {
+            'show_commands': [
+                'show dhcp server',
+                'show ip dhcp binding',
+                'show running-config section dhcp'
+            ]
+        }
+    },
+    'juniper': {
+        'vlan_config': {
+            'show_commands': [
+                'show vlans',
+                'show configuration vlans',
+                'show ethernet-switching domain'
+            ]
+        },
+        'interface_config': {
+            'show_commands': [
+                'show interfaces',
+                'show interfaces descriptions',
+                'show configuration interfaces'
+            ]
+        },
+        'vlan_interface': {
+            'show_commands': [
+                'show ethernet-switching interfaces',
+                'show vlans interface',
+                'show configuration interfaces'
+            ]
+        },
+        'ip_config': {
+            'show_commands': [
+                'show interfaces terse',
+                'show configuration interfaces | display set',
+                'show route'
+            ]
+        },
+        'routing_config': {
+            'show_commands': [
+                'show route summary',
+                'show protocols',
+                'show configuration protocols'
+            ]
+        },
+        'acl_config': {
+            'show_commands': [
+                'show firewall',
+                'show configuration firewall',
+                'show firewall counter'
+            ]
+        },
+        'qos_config': {
+            'show_commands': [
+                'show class-of-service',
+                'show configuration class-of-service',
+                'show interfaces queue'
+            ]
+        },
+        'spanning_tree': {
+            'show_commands': [
+                'show spanning-tree bridge',
+                'show spanning-tree interface',
+                'show configuration protocols mstp'
+            ]
+        },
+        'port_channel': {
+            'show_commands': [
+                'show lacp interfaces',
+                'show interfaces ae0',
+                'show configuration interfaces ae0'
+            ]
+        },
+        'dhcp_config': {
+            'show_commands': [
+                'show dhcp server',
+                'show dhcp binding',
+                'show configuration system services dhcp'
+            ]
+        }
+    },
+    'coreedge': {
+        'vlan_config': {
+            'show_commands': [
+                'show vlan all',
+                'show running-config vlan',
+                'show vlan summary'
+            ]
+        },
+        'interface_config': {
+            'show_commands': [
+                'show interface status',
+                'show interface description',
+                'show running-config interface'
+            ]
+        },
+        'vlan_interface': {
+            'show_commands': [
+                'show interface switchport',
+                'show vlan interface',
+                'show running-config interface'
+            ]
+        },
+        'ip_config': {
+            'show_commands': [
+                'show ip interface brief',
+                'show running-config interface',
+                'show ip route'
+            ]
+        },
+        'routing_config': {
+            'show_commands': [
+                'show ip protocols',
+                'show ip route summary',
+                'show running-config router'
+            ]
+        },
+        'acl_config': {
+            'show_commands': [
+                'show access-lists',
+                'show running-config access-list',
+                'show ip access-list'
+            ]
+        },
+        'qos_config': {
+            'show_commands': [
+                'show qos',
+                'show class-map',
+                'show policy-map'
+            ]
+        },
+        'spanning_tree': {
+            'show_commands': [
+                'show spanning-tree',
+                'show spanning-tree detail',
+                'show running-config spanning-tree'
+            ]
+        },
+        'port_channel': {
+            'show_commands': [
+                'show port-channel summary',
+                'show port-channel detail',
+                'show running-config port-channel'
+            ]
+        },
+        'dhcp_config': {
+            'show_commands': [
+                'show ip dhcp binding',
+                'show ip dhcp pool',
+                'show running-config dhcp'
+            ]
+        }
+    },
+    'handream': {
+        'vlan_config': {
+            'show_commands': [
+                'show vlan',
+                'show running-config vlan',
+                'show vlan brief'
+            ]
+        },
+        'interface_config': {
+            'show_commands': [
+                'show interface brief',
+                'show interface description',
+                'show running-config interface'
+            ]
+        },
+        'vlan_interface': {
+            'show_commands': [
+                'show interface switchport',
+                'show vlan interface',
+                'show running-config interface'
+            ]
+        },
+        'ip_config': {
+            'show_commands': [
+                'show ip interface brief',
+                'show running-config interface',
+                'show ip route'
+            ]
+        },
+        'routing_config': {
+            'show_commands': [
+                'show ip protocols',
+                'show ip route summary',
+                'show running-config router'
+            ]
+        },
+        'acl_config': {
+            'show_commands': [
+                'show access-lists',
+                'show running-config access-list',
+                'show ip access-list'
+            ]
+        },
+        'qos_config': {
+            'show_commands': [
+                'show qos',
+                'show class-map',
+                'show policy-map'
+            ]
+        },
+        'spanning_tree': {
+            'show_commands': [
+                'show spanning-tree',
+                'show spanning-tree detail',
+                'show running-config spanning-tree'
+            ]
+        },
+        'port_channel': {
+            'show_commands': [
+                'show port-channel summary',
+                'show port-channel detail',
+                'show running-config port-channel'
+            ]
+        },
+        'dhcp_config': {
+            'show_commands': [
+                'show ip dhcp binding',
+                'show ip dhcp pool',
+                'show running-config dhcp'
+            ]
+        }
+    }
+}
 
 @app.route('/')
 def index():
@@ -547,6 +1033,184 @@ def generate_device_script(data):
         ])
     
     return '\n'.join(commands)
+
+@app.route('/api/validate', methods=['POST'])
+def validate_data():
+    try:
+        if not request.is_json:
+            return jsonify({
+                'status': 'error',
+                'message': '잘못된 요청 형식입니다. JSON 형식이어야 합니다.'
+            }), 400
+
+        data = request.get_json()
+        logger.info(f'데이터 검증 요청: {json.dumps(data, indent=2, ensure_ascii=False)}')
+
+        # 필수 필드 검증
+        required_fields = {
+            'device_name': '장비 이름',
+            'vendor': '벤더'
+        }
+
+        missing_fields = []
+        for field, name in required_fields.items():
+            if not data.get(field):
+                missing_fields.append(name)
+
+        if missing_fields:
+            return jsonify({
+                'status': 'error',
+                'message': f'다음 필드가 필요합니다: {", ".join(missing_fields)}'
+            }), 400
+
+        # 벤더 검증
+        valid_vendors = ['cisco', 'hp', 'arista']
+        if data['vendor'].lower() not in valid_vendors:
+            return jsonify({
+                'status': 'error',
+                'message': f'지원하지 않는 벤더입니다. 지원 벤더: {", ".join(valid_vendors)}'
+            }), 400
+
+        # 작업 검증
+        tasks = data.get('tasks', {})
+        if not tasks:
+            return jsonify({
+                'status': 'error',
+                'message': '최소한 하나의 작업을 선택해주세요.'
+            }), 400
+
+        # 각 작업별 필수 파라미터 검증
+        task_requirements = {
+            'vlan_config': ['vlan_id'],
+            'interface_config': ['interface_name'],
+            'vlan_interface': ['interface_name', 'mode', 'vlan_id'],
+            'ip_config': ['interface_name', 'ip_address', 'subnet_mask']
+        }
+
+        validation_errors = []
+        for task_name, task_info in tasks.items():
+            if task_info.get('enabled'):
+                if task_name not in task_requirements:
+                    validation_errors.append(f'알 수 없는 작업 유형: {task_name}')
+                    continue
+                
+                missing_params = []
+                for param in task_requirements[task_name]:
+                    if not task_info.get(param):
+                        missing_params.append(param)
+                
+                if missing_params:
+                    validation_errors.append(f'{task_name}: 다음 파라미터가 필요합니다: {", ".join(missing_params)}')
+
+        if validation_errors:
+            return jsonify({
+                'status': 'error',
+                'message': '검증 오류가 발생했습니다.',
+                'errors': validation_errors
+            }), 400
+
+        return jsonify({
+            'status': 'success',
+            'message': '데이터가 유효합니다.',
+            'validated_data': data
+        })
+
+    except Exception as e:
+        logger.error(f'데이터 검증 중 오류: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'데이터 검증 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+@app.route('/api/auto-learning', methods=['POST'])
+def auto_learning():
+    try:
+        if not request.is_json:
+            return jsonify({
+                'status': 'error',
+                'message': '잘못된 요청 형식입니다.'
+            }), 400
+
+        data = request.get_json()
+        vendor = data.get('vendor', '').lower()
+
+        if not vendor:
+            return jsonify({
+                'status': 'error',
+                'message': '벤더 정보가 필요합니다.'
+            }), 400
+
+        # 학습 데이터 수집
+        learning_data = {
+            'vendor': vendor,
+            'timestamp': datetime.now().isoformat(),
+            'tasks': {}
+        }
+
+        # 모든 작업 유형에 대한 명령어 수집
+        for task_name, task_info in VENDOR_COMMANDS[vendor].items():
+            learning_data['tasks'][task_name] = {
+                'name': get_task_display_name(task_name),
+                'show_commands': task_info['show_commands']
+            }
+
+        # 학습 데이터 저장
+        try:
+            # 기본 디렉토리 구조 생성
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            learning_dir = os.path.join(base_dir, 'data', 'learning')
+            vendor_dir = os.path.join(learning_dir, vendor)
+            
+            # 디렉토리 생성
+            os.makedirs(vendor_dir, exist_ok=True)
+
+            # 파일명 생성 (타임스탬프 포함)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f'learning_commands_{timestamp}.json'
+            filepath = os.path.join(vendor_dir, filename)
+            
+            # 데이터 저장
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(learning_data, f, indent=2, ensure_ascii=False)
+
+            logger.info(f'학습 데이터 저장 완료: {filepath}')
+
+            return jsonify({
+                'status': 'success',
+                'message': '자동학습 데이터가 생성되었습니다.',
+                'saved_path': filepath,
+                'tasks': learning_data['tasks']
+            })
+
+        except Exception as e:
+            logger.error(f'학습 데이터 저장 중 오류: {str(e)}')
+            return jsonify({
+                'status': 'error',
+                'message': f'학습 데이터 저장 중 오류가 발생했습니다: {str(e)}'
+            }), 500
+
+    except Exception as e:
+        logger.error(f'자동학습 처리 중 오류: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'자동학습 처리 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+def get_task_display_name(task_name):
+    """작업 유형의 표시 이름을 반환합니다."""
+    task_names = {
+        'vlan_config': 'VLAN 설정',
+        'interface_config': '인터페이스 설정',
+        'vlan_interface': 'VLAN 인터페이스 설정',
+        'ip_config': 'IP 설정',
+        'routing_config': '라우팅 설정',
+        'acl_config': 'ACL 설정',
+        'qos_config': 'QoS 설정',
+        'spanning_tree': '스패닝 트리 설정',
+        'port_channel': '포트 채널 설정',
+        'dhcp_config': 'DHCP 설정'
+    }
+    return task_names.get(task_name, task_name)
 
 if __name__ == '__main__':
     app.run(debug=True) 
