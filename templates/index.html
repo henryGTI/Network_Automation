@@ -74,8 +74,17 @@
                                     <div class="category-header">VLAN 관리</div>
                                     <div class="sub-options">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="vlanBasic">
-                                            <label class="form-check-label" for="vlanBasic">VLAN 생성/삭제</label>
+                                            <input type="checkbox" 
+                                                   class="form-check-input config-checkbox" 
+                                                   id="vlanConfig" 
+                                                   data-config="vlan" 
+                                                   data-task-name="VLAN 생성/삭제">
+                                            <label class="form-check-label" for="vlanConfig">
+                                                VLAN 설정
+                                            </label>
+                                            <div id="vlanInputs" style="display: none;">
+                                                <!-- VLAN 설정 입력 필드들 -->
+                                            </div>
                                         </div>
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" id="vlanInterface">
@@ -226,9 +235,12 @@
                     </div>
 
                     <!-- 작업 버튼 -->
-                    <div class="mt-4">
-                        <button class="btn btn-primary" onclick="generateScript()">스크립트 생성</button>
-                        <button class="btn btn-success ms-2" onclick="executeScript()" id="executeBtn" disabled>스크립트 실행</button>
+                    <div class="mt-3">
+                        <button type="button" 
+                                class="btn btn-primary mt-3" 
+                                id="createScriptBtn">
+                            스크립트 생성
+                        </button>
                     </div>
 
                     <!-- 스크립트 표시 영역 -->
@@ -310,43 +322,51 @@
             </div>
         </div>
 
-        <!-- 저장된 장비 목록 섹션 -->
+        <!-- 저장된 장비 목록 -->
         <div class="mt-4">
-            <h3>저장된 장비 목록</h3>
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>장비명</th>
-                        <th>벤더</th>
-                        <th>사용자명</th>
-                        <th>비밀번호</th>
-                        <th>IP 주소</th>
-                        <th>설정 작업</th>
-                        <th>작업</th>
-                    </tr>
-                </thead>
-                <tbody id="deviceList">
-                    <!-- 여기에 장비 목록이 동적으로 추가됩니다 -->
-                </tbody>
-            </table>
+            <h5>저장된 장비 목록</h5>
+            <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>장비명</th>
+                            <th>장비 유형</th>
+                            <th>벤더</th>
+                            <th>작업</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deviceTableBody">
+                        <!-- 장비 목록이 여기에 동적으로 추가됩니다 -->
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- 스크립트 모달 -->
         <div class="modal fade" id="scriptModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">스크립트 정보</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <h5 class="modal-title">스크립트 실행</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div id="scriptDisplay"></div>
+                        <!-- 모달 내용 -->
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                        <button type="button" class="btn btn-primary" onclick="executeScript()">실행</button>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- 스크립트 표시 영역 추가 -->
+        <div class="mt-4">
+            <pre id="scriptDisplay" class="bg-light p-3 rounded">
+                <!-- 스크립트 내용이 여기에 표시됩니다 -->
+            </pre>
         </div>
     </div>
 
@@ -356,152 +376,4 @@
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
-
-<script>
-// 스크립트 보기 함수
-async function viewDeviceScript(deviceName) {
-    try {
-        const response = await fetch(`/api/device/scripts/${deviceName}`);
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            const scriptData = result.data;
-            const scriptDisplay = document.getElementById('scriptDisplay');
-            
-            if (!scriptDisplay) {
-                console.error('scriptDisplay element not found');
-                return;
-            }
-
-            // 스크립트 정보 표시
-            scriptDisplay.innerHTML = `
-                <div class="mb-3">
-                    <h5>장비 정보</h5>
-                    <pre class="bg-light p-2">${JSON.stringify(scriptData.device_info || {}, null, 2)}</pre>
-                </div>
-                <div class="mb-3">
-                    <h5>명령어</h5>
-                    <pre class="bg-light p-2">${Array.isArray(scriptData.commands) ? scriptData.commands.join('\n') : ''}</pre>
-                </div>
-                <div>
-                    <h5>생성 시간</h5>
-                    <pre class="bg-light p-2">${scriptData.generated_at || ''}</pre>
-                </div>
-            `;
-
-            // 모달 표시
-            const scriptModal = new bootstrap.Modal(document.getElementById('scriptModal'));
-            scriptModal.show();
-        } else {
-            alert('스크립트를 불러오는데 실패했습니다: ' + (result.message || '알 수 없는 오류'));
-        }
-    } catch (error) {
-        console.error('스크립트 보기 중 오류:', error);
-        alert('스크립트를 불러오는 중 오류가 발생했습니다.');
-    }
-}
-
-// 장비 목록 업데이트 함수
-function updateDeviceList(devices) {
-    const deviceList = document.getElementById('deviceList');
-    if (!deviceList) return;
-
-    if (!Array.isArray(devices) || devices.length === 0) {
-        deviceList.innerHTML = '<tr><td colspan="7" class="text-center">저장된 장비가 없습니다.</td></tr>';
-        return;
-    }
-
-    deviceList.innerHTML = devices.map(device => `
-        <tr>
-            <td>${device.device_name || ''}</td>
-            <td>${device.vendor || ''}</td>
-            <td>${device.username || ''}</td>
-            <td>${device.password || ''}</td>
-            <td>${device.ip_address || ''}</td>
-            <td>${device.tasks ? Object.keys(device.tasks).join(', ') : ''}</td>
-            <td>
-                <div class="btn-group">
-                    <button class="btn btn-sm btn-info" onclick="viewDeviceScript('${device.device_name}')">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="btn btn-sm btn-success" onclick="executeScript('${device.device_name}')">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteDevice('${device.device_name}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// 장비 목록 로드 함수
-async function loadDeviceList() {
-    try {
-        const response = await fetch('/api/devices');
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            updateDeviceList(result.data || []);
-        } else {
-            console.error('장비 목록 로드 실패:', result.message);
-            updateDeviceList([]);
-        }
-    } catch (error) {
-        console.error('장비 목록 로드 중 오류:', error);
-        updateDeviceList([]);
-    }
-}
-
-// 스크립트 실행 함수
-async function executeScript(deviceName) {
-    if (!confirm('스크립트를 실행하시겠습니까?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/script/execute/${deviceName}`, {
-            method: 'POST'
-        });
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            alert('스크립트가 실행되었습니다.');
-        } else {
-            alert('스크립트 실행 실패: ' + (result.message || '알 수 없는 오류'));
-        }
-    } catch (error) {
-        console.error('스크립트 실행 중 오류:', error);
-        alert('스크립트 실행 중 오류가 발생했습니다.');
-    }
-}
-
-// 장비 삭제 함수
-async function deleteDevice(deviceName) {
-    if (!confirm('이 장비를 삭제하시겠습니까?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/device/${deviceName}`, {
-            method: 'DELETE'
-        });
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            alert('장비가 삭제되었습니다.');
-            loadDeviceList();
-        } else {
-            alert('장비 삭제 실패: ' + (result.message || '알 수 없는 오류'));
-        }
-    } catch (error) {
-        console.error('장비 삭제 중 오류:', error);
-        alert('장비 삭제 중 오류가 발생했습니다.');
-    }
-}
-
-// 페이지 로드 시 실행
-document.addEventListener('DOMContentLoaded', loadDeviceList);
-</script>
 
