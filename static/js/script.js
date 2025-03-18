@@ -132,214 +132,105 @@ const elements = {
     scriptDisplay: null
 };
 
-// 전역 범위에서 모든 함수들을 먼저 정의
-async function handleCreateScript(event) {
-    event.preventDefault();
-    try {
-        const deviceName = document.getElementById('deviceName')?.value;
-        const vendor = document.getElementById('vendor')?.value;
-        
-        if (!deviceName || !vendor) {
-            throw new Error('장비 이름과 벤더 정보를 입력해주세요.');
-        }
+// 전역 변수
+let isLearningInProgress = false;
 
-        const tasks = collectTasks();
-        if (Object.keys(tasks).length === 0) {
-            throw new Error('최소한 하나의 작업을 선택해주세요.');
-        }
-
-        const data = {
-            device_name: deviceName,
-            vendor: vendor,
-            tasks: tasks
-        };
-
-        if (document.getElementById('ipConfig')?.checked) {
-            data.tasks.ip_config = {
-                enabled: true,
-                interface_name: document.getElementById('ipInterface')?.value,
-                ip_address: document.getElementById('scriptIpAddress')?.value,
-                subnet_mask: document.getElementById('subnetMask')?.value
-            };
-        }
-
-        fetch('/api/devices/script', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('스크립트 생성 실패');
-            }
-            return response.json();
-        })
-        .then(result => {
-            alert(result.message);
-        })
-        .catch(error => {
-            console.error('스크립트 생성 오류:', error);
-            alert(error.message);
-        });
-        
-    } catch (error) {
-        console.error('스크립트 생성 오류:', error);
-        alert(error.message);
-    }
+// 디버깅을 위한 로그 함수
+function log(message) {
+    console.log(`[자동학습] ${message}`);
 }
 
-function handleAddDevice(event) {
-    event.preventDefault();
-    const deviceName = document.getElementById('deviceName')?.value;
-    const vendor = document.getElementById('vendor')?.value;
-
-    if (!deviceName || !vendor) {
-        alert('장비 이름과 벤더 정보를 입력해주세요.');
-        return;
-    }
-
-    fetch('/api/devices', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            device_name: deviceName,
-            vendor: vendor
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('장비 추가 실패');
-        }
-        return response.json();
-    })
-    .then(result => {
-        alert(result.message);
-        loadDeviceList();
-    })
-    .catch(error => {
-        console.error('장비 추가 오류:', error);
-        alert(error.message);
-    });
-}
-
-function collectTasks() {
-    const tasks = {};
+// 페이지 로드 시 초기화
+document.addEventListener('DOMContentLoaded', function() {
+    log('페이지 초기화 시작');
     
-    // VLAN 설정
-    const vlanConfigCheckbox = document.getElementById('vlanConfig');
-    if (vlanConfigCheckbox && vlanConfigCheckbox.checked) {
-        const vlanId = document.getElementById('vlanId')?.value;
-        const vlanName = document.getElementById('vlanName')?.value;
-        
-        if (!vlanId || !vlanName) {
-            throw new Error('VLAN ID와 이름을 입력해주세요.');
-        }
-        
-        tasks['VLAN 생성/삭제'] = {
-            enabled: true,
-            vlan_id: vlanId,
-            vlan_name: vlanName
-        };
-    }
-
-    // VLAN 인터페이스 설정
-    const vlanInterfaceCheckbox = document.getElementById('vlanInterface');
-    if (vlanInterfaceCheckbox && vlanInterfaceCheckbox.checked) {
-        const interfaceName = document.getElementById('interfaceName')?.value;
-        const interfaceMode = document.getElementById('interfaceMode')?.value;
-        const interfaceVlanId = document.getElementById('interfaceVlanId')?.value;
-        
-        if (!interfaceName || !interfaceMode || !interfaceVlanId) {
-            throw new Error('인터페이스 정보를 모두 입력해주세요.');
-        }
-        
-        tasks['vlanInterface'] = {
-            enabled: true,
-            interface_name: interfaceName,
-            mode: interfaceMode,
-            vlan_id: interfaceVlanId
-        };
-    }
-
-    console.log('수집된 작업 데이터:', tasks);
-    return tasks;
-}
-
-async function loadDeviceList() {
-    try {
-        const response = await fetch('/api/devices');
-        if (!response.ok) {
-            throw new Error('장비 목록을 가져오는데 실패했습니다.');
-        }
-        
-        const data = await response.json();
-        console.log('로드된 장비 목록:', data);
-
-        // 데이터가 배열이 아닌 경우 처리
-        const devices = Array.isArray(data) ? data : (data.devices || []);
-        
-        updateDeviceTable(devices);
-    } catch (error) {
-        console.error('장비 목록 로드 오류:', error);
-        updateDeviceTable([]); // 빈 배열로 테이블 업데이트
-    }
-}
-
-function updateDeviceTable(devices) {
-    const tableBody = document.getElementById('deviceTableBody');
-    if (!tableBody) {
-        console.error('장비 목록 테이블을 찾을 수 없습니다.');
+    const startButton = document.getElementById('startLearning');
+    const vendorSelect = document.getElementById('learningVendor');
+    
+    if (!startButton || !vendorSelect) {
+        log('오류: 필요한 DOM 요소를 찾을 수 없습니다.');
         return;
     }
 
-    if (devices.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="3" class="text-center">등록된 장비가 없습니다.</td>
-            </tr>`;
-        return;
-    }
+    // 벤더 선택 이벤트
+    vendorSelect.addEventListener('change', function() {
+        const isVendorSelected = !!this.value;
+        startButton.disabled = !isVendorSelected;
+        log(`벤더 선택됨: ${this.value}`);
+    });
 
-    tableBody.innerHTML = devices.map((device, index) => `
-        <tr>
-            <td>${index + 1}</td>
-            <td>${device.device_name || '-'}</td>
-            <td>${device.vendor || '-'}</td>
-        </tr>
-    `).join('');
-}
+    // 자동학습 시작 버튼 이벤트
+    startButton.addEventListener('click', async function(event) {
+        event.preventDefault();
+        log('자동학습 버튼 클릭됨');
 
-// 페이지 초기화 함수
-function initializePage() {
-    console.log('페이지 초기화 시작');
-    try {
-        // 스크립트 생성 버튼
-        const createScriptBtn = document.getElementById('createScriptBtn');
-        if (createScriptBtn) {
-            createScriptBtn.addEventListener('click', handleCreateScript);
+        const vendor = vendorSelect.value;
+        if (!vendor) {
+            alert('벤더를 선택해주세요.');
+            return;
         }
 
-        // 장비 추가 버튼
-        const addDeviceBtn = document.getElementById('addDeviceBtn');
-        if (addDeviceBtn) {
-            addDeviceBtn.addEventListener('click', handleAddDevice);
+        try {
+            // 버튼 비활성화
+            startButton.disabled = true;
+            startButton.innerHTML = '<i class="bi bi-hourglass-split"></i> 학습 중...';
+
+            // 프로그레스 바 표시
+            const progressDiv = document.getElementById('learningProgress');
+            if (progressDiv) {
+                progressDiv.style.display = 'block';
+                progressDiv.querySelector('.progress-bar').style.width = '50%';
+                progressDiv.querySelector('.learning-status').textContent = '자동학습 진행 중...';
+            }
+
+            // API 호출
+            log(`API 호출 시작: ${vendor}`);
+            const response = await fetch('/api/auto-learning', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ vendor })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API 오류: ${response.status}`);
+            }
+
+            const data = await response.json();
+            log('API 응답 받음:', data);
+
+            // 성공 결과 표시
+            const resultDiv = document.getElementById('learningResult');
+            if (resultDiv) {
+                resultDiv.style.display = 'block';
+                resultDiv.querySelector('.result-content').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i> 
+                        ${vendor} 벤더의 자동학습이 완료되었습니다.
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            log('오류 발생:', error);
+            alert(`자동학습 중 오류가 발생했습니다: ${error.message}`);
+        } finally {
+            // 버튼 상태 복원
+            startButton.disabled = false;
+            startButton.innerHTML = '<i class="bi bi-play-circle"></i> 자동 학습 시작';
+
+            // 프로그레스 바 완료 표시
+            const progressDiv = document.getElementById('learningProgress');
+            if (progressDiv) {
+                progressDiv.querySelector('.progress-bar').style.width = '100%';
+                progressDiv.querySelector('.learning-status').textContent = '완료';
+            }
         }
+    });
 
-        // 장비 목록 로드
-        loadDeviceList();
-        
-        console.log('페이지 초기화 완료');
-    } catch (error) {
-        console.error('페이지 초기화 중 오류:', error);
-    }
-}
-
-// DOMContentLoaded 이벤트에서 초기화 함수 호출
-document.addEventListener('DOMContentLoaded', initializePage);
+    log('페이지 초기화 완료');
+});
 
 // 장비 보기 함수
 async function viewDevice(deviceName) {
@@ -615,96 +506,19 @@ async function validateData(data) {
     }
 }
 
-async function handleAutoLearning(event) {
-    event.preventDefault();
+// 스크립트 보기
+async function viewScript(deviceName) {
     try {
-        const vendor = document.getElementById('learningVendor').value;
-
-        if (!vendor) {
-            alert('벤더를 선택해주세요.');
-            return;
-        }
-
-        const data = {
-            vendor: vendor
-        };
-
-        // 로딩 표시
-        const commandList = document.getElementById('commandList');
-        commandList.innerHTML = `
-            <div class="text-center my-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="mt-2">자동학습 중입니다...</p>
-            </div>
-        `;
-
-        const response = await fetch('/api/auto-learning', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
+        const response = await fetch(`/api/devices/${deviceName}/script`);
+        if (!response.ok) throw new Error('스크립트 로드 실패');
         
-        if (!response.ok) {
-            throw new Error(result.message || '자동학습 처리 실패');
-        }
-
-        // 결과 표시
-        if (commandList) {
-            let html = `
-                <div class="alert alert-success mb-4">
-                    <i class="bi bi-check-circle-fill me-2"></i>
-                    ${vendor.toUpperCase()} 장비 자동학습이 완료되었습니다.
-                </div>
-                <div class="row row-cols-1 row-cols-md-2 g-4">
-            `;
-            
-            for (const [taskName, taskInfo] of Object.entries(result.tasks)) {
-                html += `
-                    <div class="col">
-                        <div class="card h-100 border-0 shadow-sm">
-                            <div class="card-header bg-light">
-                                <h5 class="card-title mb-0">
-                                    <i class="bi bi-gear-fill me-2"></i>
-                                    ${taskInfo.name}
-                                </h5>
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="list-group list-group-flush">
-                                    ${taskInfo.show_commands.map(cmd => 
-                                        `<div class="list-group-item">
-                                            <code class="text-primary">${cmd}</code>
-                                        </div>`
-                                    ).join('')}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            html += '</div>';
-            commandList.innerHTML = html;
-        }
+        const scriptContent = await response.text();
+        document.getElementById('scriptContent').textContent = scriptContent;
         
+        $('#scriptViewModal').modal('show');
     } catch (error) {
-        console.error('자동학습 처리 오류:', error);
-        const commandList = document.getElementById('commandList');
-        if (commandList) {
-            commandList.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                    ${error.message}
-                </div>
-            `;
-        }
+        console.error('스크립트 보기 중 오류:', error);
+        alert('스크립트 보기 중 오류가 발생했습니다: ' + error.message);
     }
-}
-
-// 이벤트 리스너 등록
-document.getElementById('autoLearningBtn')?.addEventListener('click', handleAutoLearning); 
+} 
+} 
