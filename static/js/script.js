@@ -622,137 +622,109 @@ function showConfigForm() {
     }
 }
 
-// 스크립트 생성
-async function generateScript() {
-    // 선택된 모든 옵션 수집
-    const selectedOptions = {};
-    document.querySelectorAll('.category-group').forEach(group => {
-        const categoryName = group.querySelector('.category-check').id;
-        const selectedSubOptions = Array.from(group.querySelectorAll('.sub-options input:checked'))
-            .map(checkbox => checkbox.id);
-        
-        if (selectedSubOptions.length > 0) {
-            selectedOptions[categoryName] = selectedSubOptions;
-        }
-    });
-
-    if (Object.keys(selectedOptions).length === 0) {
-        alert('하나 이상의 설정 옵션을 선택해주세요.');
-        return;
-    }
-
+// 스크립트 생성 버튼 이벤트 핸들러
+document.getElementById('generateScript')?.addEventListener('click', async function() {
+    console.log('스크립트 생성 시작');
+    
     try {
-        const response = await fetch('/api/generate_script', {
+        const deviceSelect = document.getElementById('deviceSelect');
+        const taskType = document.getElementById('taskType');
+        
+        if (!deviceSelect || !taskType) {
+            throw new Error('필수 DOM 요소를 찾을 수 없습니다.');
+        }
+
+        if (!deviceSelect.value || !taskType.value) {
+            showMessage('장비와 작업 유형을 선택해주세요.', 'warning');
+            return;
+        }
+
+        // 파라미터 수집 및 검증
+        const params = collectTaskParameters(taskType.value);
+        console.log('수집된 파라미터:', params);
+
+        const formData = {
+            device: deviceSelect.value,
+            taskType: taskType.value,
+            params: params
+        };
+
+        console.log('전송할 데이터:', formData);
+
+        const response = await fetch('/api/generate-script', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
-            body: JSON.stringify({
-                options: selectedOptions
-            })
+            body: JSON.stringify(formData)
         });
 
         const result = await response.json();
-        if (response.ok) {
-            document.getElementById('generatedScript').textContent = result.script;
-            document.getElementById('executeBtn').disabled = false;
-        } else {
-            alert('스크립트 생성 실패: ' + result.message);
+        console.log('서버 응답:', result);
+
+        if (!response.ok) {
+            throw new Error(result.message || '스크립트 생성 실패');
         }
-    } catch (error) {
-        alert('스크립트 생성 중 오류 발생: ' + error.message);
-    }
-}
 
-// 스크립트 실행
-async function executeScript() {
-    try {
-        const response = await fetch('/api/execute_script', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                deviceName: document.getElementById('deviceName').value,
-                vendor: document.getElementById('vendorSelect').value,
-                ip_address: document.getElementById('ipAddress').value,
-                username: document.getElementById('username').value,
-                password: document.getElementById('password').value,
-                script: document.getElementById('generatedScript').textContent
-            })
-        });
-
-        const result = await response.json();
-        if (response.ok) {
-            document.getElementById('executionResult').textContent = result.output;
+        // 생성된 스크립트 표시
+        const scriptDisplay = document.getElementById('generatedScript');
+        if (scriptDisplay) {
+            scriptDisplay.textContent = result.script;
+            document.getElementById('executeScript').disabled = false;
+            showMessage('스크립트가 생성되었습니다.', 'success');
         } else {
-            alert('스크립트 실행 실패: ' + result.message);
+            throw new Error('스크립트 표시 영역을 찾을 수 없습니다.');
         }
-    } catch (error) {
-        alert('스크립트 실행 중 오류 발생: ' + error.message);
-    }
-}
 
-// 에러 메시지 표시
-function showError(message) {
-    // 상단에 오류 메시지 표시
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'alert alert-danger alert-dismissible fade show';
-    errorDiv.innerHTML = `
-        <i class="bi bi-exclamation-triangle-fill"></i>
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
+    } catch (error) {
+        console.error('스크립트 생성 오류:', error);
+        showMessage(error.message, 'danger');
+    }
+});
+
+// 작업 유형별 파라미터 수집 함수
+function collectTaskParameters(taskType) {
+    console.log('파라미터 수집 시작:', taskType);
     
-    // 기존 오류 메시지 제거
-    const existingError = document.querySelector('.alert-danger');
-    if (existingError) {
-        existingError.remove();
-    }
+    const params = {};
+    const taskForm = document.querySelector('.task-form');
     
-    // 새 오류 메시지 추가
-    const container = document.querySelector('.container');
-    if (container) {
-        container.insertBefore(errorDiv, container.firstChild);
+    if (!taskForm) {
+        console.error('작업 폼을 찾을 수 없습니다.');
+        return params;
     }
-}
 
-async function validateData(data) {
-    try {
-        const response = await fetch('/api/validate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        if (result.status === 'success') {
-            alert('데이터가 유효합니다.');
-        } else {
-            alert('데이터 검증 중 오류가 발생했습니다: ' + result.message);
+    // 폼 데이터 수집 및 검증
+    const formData = new FormData(taskForm);
+    for (let [key, value] of formData.entries()) {
+        // 값이 비어있지 않은 경우에만 파라미터에 추가
+        if (value.trim()) {
+            params[key] = value.trim();
         }
-    } catch (error) {
-        console.error('데이터 검증 중 오류:', error);
-        alert('데이터 검증 중 오류가 발생했습니다: ' + error.message);
     }
-}
 
-// 스크립트 보기
-async function viewScript(deviceName) {
-    try {
-        const response = await fetch(`/api/devices/${deviceName}/script`);
-        if (!response.ok) throw new Error('스크립트 로드 실패');
-        
-        const scriptContent = await response.text();
-        document.getElementById('scriptContent').textContent = scriptContent;
-        
-        $('#scriptViewModal').modal('show');
-    } catch (error) {
-        console.error('스크립트 보기 중 오류:', error);
-        alert('스크립트 보기 중 오류가 발생했습니다: ' + error.message);
+    // 작업 유형별 필수 파라미터 검증
+    if (taskType === 'vlan') {
+        if (!params.vlanAction) {
+            throw new Error('VLAN 작업 유형을 선택해주세요.');
+        }
+        if (!params.vlanId) {
+            throw new Error('VLAN ID를 입력해주세요.');
+        }
+        // VLAN ID 범위 검증
+        const vlanId = parseInt(params.vlanId);
+        if (isNaN(vlanId) || vlanId < 1 || vlanId > 4094) {
+            throw new Error('VLAN ID는 1-4094 범위여야 합니다.');
+        }
+        // 인터페이스 필수 여부 검증
+        if (['assign', 'trunk'].includes(params.vlanAction) && !params.interface) {
+            throw new Error('인터페이스를 지정해주세요.');
+        }
     }
+
+    console.log('수집된 파라미터:', params);
+    return params;
 }
 
 // 장비 추가 폼 제출 처리

@@ -23,6 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / 'data'
 DEVICES_DIR = DATA_DIR / 'devices'
 DEVICES_FILE = DEVICES_DIR / 'devices.json'
+SCRIPTS_DIR = DATA_DIR / 'scripts'
+LEARNING_DIR = DATA_DIR / 'learning'
+VENDOR_COMMANDS_FILE = LEARNING_DIR / 'vendor_commands.json'
 
 # VENDOR_PATTERNS를 app.py 상단에 정의
 VENDOR_PATTERNS = {
@@ -182,21 +185,15 @@ VENDOR_PATTERNS = {
 VENDOR_COMMANDS = {
     'cisco': {
         'vlan_config': {
-            'name': 'VLAN 생성/삭제',
-            'patterns': [
-                r'vlan (\d+)',
-                r'name (.+)'
-            ],
-            'show_commands': [
-                'show vlan brief',
-                'show running-config | include vlan'
-            ],
+            'name': 'VLAN 설정',
             'template': [
-                'configure terminal',
                 'vlan {vlan_id}',
-                'name {vlan_name}',
-                'exit'
-            ]
+                'name {vlan_name}'
+            ],
+            'parameters': {
+                'vlan_id': 'VLAN 번호 (1-4094)',
+                'vlan_name': 'VLAN 이름'
+            }
         },
         'interface_config': {
             'name': '인터페이스 설정',
@@ -605,6 +602,161 @@ VENDOR_COMMANDS = {
 # 스크립트 저장 경로 추가
 SCRIPTS_DIR = DATA_DIR / 'scripts'
 
+# 학습 데이터 경로 설정
+DATA_DIR = Path(__file__).parent / 'data'
+LEARNING_DIR = DATA_DIR / 'learning'
+VENDOR_COMMANDS_FILE = LEARNING_DIR / 'vendor_commands.json'
+
+# 벤더 매핑 확장
+VENDOR_MAPPING = {
+    'cisco': 'cisco',
+    'cisco systems': 'cisco',
+    'cisco_ios': 'cisco',
+    'juniper': 'juniper',
+    'juniper networks': 'juniper',
+    'huawei': 'huawei',
+    'arista': 'arista',
+    'hp': 'hp',
+    'hewlett packard': 'hp',
+    'hp enterprise': 'hp',
+    'handreamnet': 'handreamnet',
+    '한드림넷': 'handreamnet',
+    'coreedge': 'coreedge',
+    'coreedgenetworks': 'coreedge',
+    '코어엣지네트웍스': 'coreedge',
+    '코어엣지': 'coreedge'
+}
+
+# 기본 벤더 명령어 템플릿 확장
+DEFAULT_VENDOR_COMMANDS = {
+    "cisco": {
+        # 기존 Cisco 템플릿 유지
+    },
+    "handreamnet": {
+        "vlan": {
+            "create": "vlan database\nvlan {vlan_id}",
+            "name": "vlan name {vlan_id} {vlan_name}",
+            "delete": "vlan database\nno vlan {vlan_id}",
+            "interface": "interface {interface}",
+            "access": "switchport mode access",
+            "assign": "switchport access vlan {vlan_id}",
+            "trunk": "switchport mode trunk",
+            "allow": "switchport trunk allowed vlan add {vlan_id}"
+        },
+        "port": {
+            "interface": "interface {interface}",
+            "mode_access": "switchport mode access",
+            "mode_trunk": "switchport mode trunk",
+            "speed": "speed {speed}",
+            "duplex": "duplex {duplex}",
+            "shutdown": "shutdown",
+            "no_shutdown": "no shutdown"
+        },
+        "routing": {
+            "static": "ip route {network} {mask} {next_hop}",
+            "ospf_network": "network {network} {wildcard} area {area}",
+            "eigrp_network": "network {network} {wildcard}",
+            "bgp_neighbor": "neighbor {neighbor_ip} remote-as {remote_as}"
+        },
+        "security": {
+            "port_security": "port-security",
+            "max_mac": "port-security maximum {max_addresses}",
+            "violation": "port-security violation {violation_mode}",
+            "access_list": "access-list {acl_number} {action} {protocol} {source} {destination}"
+        }
+    },
+    "coreedge": {
+        "vlan": {
+            "create": "vlan {vlan_id}",
+            "name": "name {vlan_name}",
+            "delete": "no vlan {vlan_id}",
+            "interface": "interface {interface}",
+            "access": "switchport mode access",
+            "assign": "switchport access vlan {vlan_id}",
+            "trunk": "switchport mode trunk",
+            "allow": "switchport trunk allowed vlan add {vlan_id}"
+        },
+        "port": {
+            "interface": "interface {interface}",
+            "mode_access": "switchport mode access",
+            "mode_trunk": "switchport mode trunk",
+            "speed": "speed-duplex {speed}-{duplex}",
+            "shutdown": "shutdown",
+            "no_shutdown": "no shutdown"
+        },
+        "routing": {
+            "static": "ip route {network} {mask} {next_hop}",
+            "ospf_network": "router ospf {process_id}\nnetwork {network} {wildcard} area {area}",
+            "eigrp_network": "router eigrp {as_number}\nnetwork {network} {wildcard}",
+            "bgp_neighbor": "router bgp {as_number}\nneighbor {neighbor_ip} remote-as {remote_as}"
+        },
+        "security": {
+            "port_security": "port-security",
+            "max_mac": "port-security maximum {max_addresses}",
+            "violation": "port-security violation {violation_mode}",
+            "access_list": "access-list {acl_number} {action} {protocol} {source} {destination}"
+        }
+    }
+}
+
+def init_learning_data():
+    """학습 데이터 디렉토리 및 파일 초기화"""
+    try:
+        # 디렉토리 생성
+        LEARNING_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # 현재 저장된 벤더 명령어 로드
+        current_commands = {}
+        if VENDOR_COMMANDS_FILE.exists():
+            with open(VENDOR_COMMANDS_FILE, 'r', encoding='utf-8') as f:
+                current_commands = json.load(f)
+        
+        # 새로운 벤더 명령어 추가 또는 업데이트
+        updated = False
+        for vendor, commands in DEFAULT_VENDOR_COMMANDS.items():
+            if vendor not in current_commands:
+                current_commands[vendor] = commands
+                updated = True
+                logger.info(f"새로운 벤더 추가됨: {vendor}")
+        
+        # 변경사항이 있을 경우에만 파일 저장
+        if updated or not VENDOR_COMMANDS_FILE.exists():
+            with open(VENDOR_COMMANDS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(current_commands, f, ensure_ascii=False, indent=2)
+                logger.info(f"벤더 명령어 파일 업데이트됨: {VENDOR_COMMANDS_FILE}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"학습 데이터 초기화 오류: {str(e)}")
+        return False
+
+def load_vendor_commands():
+    """벤더별 학습된 CLI 명령어 로드"""
+    try:
+        # 파일이 없으면 초기화
+        if not VENDOR_COMMANDS_FILE.exists():
+            init_learning_data()
+        
+        with open(VENDOR_COMMANDS_FILE, 'r', encoding='utf-8') as f:
+            commands = json.load(f)
+            logger.debug(f"벤더 명령어 로드됨: {len(commands)} 벤더")
+            return commands
+    except Exception as e:
+        logger.error(f"벤더 명령어 로드 오류: {str(e)}")
+        return DEFAULT_VENDOR_COMMANDS
+
+def save_vendor_commands(commands):
+    """벤더별 CLI 명령어 저장"""
+    try:
+        LEARNING_DIR.mkdir(parents=True, exist_ok=True)
+        with open(VENDOR_COMMANDS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(commands, f, ensure_ascii=False, indent=2)
+        logger.info("벤더 명령어 저장 완료")
+        return True
+    except Exception as e:
+        logger.error(f"벤더 명령어 저장 오류: {str(e)}")
+        return False
+
 def init_data_directories():
     """데이터 디렉토리 및 파일 초기화"""
     try:
@@ -644,13 +796,11 @@ def init_data_directories():
 def load_devices():
     """장비 목록 로드"""
     try:
-        if DEVICES_FILE.exists():
-            with open(DEVICES_FILE, 'r', encoding='utf-8') as f:
+        devices_file = DATA_DIR / 'devices' / 'devices.json'
+        if devices_file.exists():
+            with open(devices_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        else:
-            logger.warning("devices.json 파일이 없어 새로 생성합니다.")
-            init_data_directories()
-            return []
+        return []
     except Exception as e:
         logger.error(f"장비 목록 로드 오류: {str(e)}")
         return []
@@ -658,12 +808,12 @@ def load_devices():
 def save_devices(devices):
     """장비 목록 저장"""
     try:
-        # 디렉토리가 없으면 생성
-        DEVICES_DIR.mkdir(parents=True, exist_ok=True)
+        devices_dir = DATA_DIR / 'devices'
+        devices_dir.mkdir(parents=True, exist_ok=True)
         
-        with open(DEVICES_FILE, 'w', encoding='utf-8') as f:
+        devices_file = devices_dir / 'devices.json'
+        with open(devices_file, 'w', encoding='utf-8') as f:
             json.dump(devices, f, ensure_ascii=False, indent=2)
-        logger.info("장비 목록 저장 완료")
         return True
     except Exception as e:
         logger.error(f"장비 목록 저장 오류: {str(e)}")
@@ -1096,48 +1246,135 @@ def learn_cli():
                 },
                 'interface_config': {
                     'name': '인터페이스 설정',
-                    'commands': [
-                        'set interfaces {interface_name} unit 0 family ethernet-switching',
+                    'patterns': [
+                        r'set interfaces (\S+) description (.+)',
+                        r'set interfaces (\S+) (disable|enable)'
+                    ],
+                    'show_commands': [
+                        'show interfaces',
+                        'show configuration interfaces'
+                    ],
+                    'template': [
+                        'configure',
+                        'set interfaces {interface_name} description {description}',
+                        'set interfaces {interface_name} {status}',
+                        'commit'
+                    ]
+                },
+                'vlan_interface': {
+                    'name': 'VLAN 인터페이스 설정',
+                    'patterns': [
+                        r'set interfaces (\S+) unit 0 family ethernet-switching port-mode (access|trunk)',
+                        r'set interfaces (\S+) unit 0 family ethernet-switching vlan members (\d+)'
+                    ],
+                    'show_commands': [
+                        'show ethernet-switching interfaces',
+                        'show configuration interfaces'
+                    ],
+                    'template': [
+                        'configure',
                         'set interfaces {interface_name} unit 0 family ethernet-switching port-mode {mode}',
                         'set interfaces {interface_name} unit 0 family ethernet-switching vlan members {vlan_id}',
                         'commit'
-                    ],
-                    'parameters': {
-                        'interface_name': '인터페이스 이름 (예: ge-0/0/1)',
-                        'mode': '포트 모드 (access/trunk)',
-                        'vlan_id': 'VLAN 번호'
-                    }
+                    ]
                 },
-                'port_channel': {
-                    'name': '포트 채널 설정',
-                    'commands': [
-                        'configure',
-                        'set chassis aggregated-devices ethernet device-count {ae_count}',
-                        'set interfaces {interface_name} ether-options 802.3ad ae{ae_number}',
-                        'set interfaces ae{ae_number} aggregated-ether-options lacp {lacp_mode}',
-                        'commit'
+                'ip_config': {
+                    'name': 'IP 주소 설정',
+                    'patterns': [
+                        r'set interfaces (\S+) unit (\d+) family inet address (\d+\.\d+\.\d+\.\d+/\d+)'
                     ],
-                    'parameters': {
-                        'ae_count': '애그리게이트 인터페이스 수',
-                        'interface_name': '물리 인터페이스 이름',
-                        'ae_number': '애그리게이트 인터페이스 번호',
-                        'lacp_mode': 'LACP 모드 (active/passive)'
-                    }
+                    'show_commands': [
+                        'show interfaces terse',
+                        'show configuration interfaces'
+                    ],
+                    'template': [
+                        'configure',
+                        'set interfaces {interface_name} unit {unit} family inet address {ip_address}',
+                        'commit'
+                    ]
+                },
+                'routing_config': {
+                    'name': '라우팅 설정',
+                    'patterns': [
+                        r'set protocols (ospf|bgp) area (\d+) interface (\S+)',
+                        r'set protocols ospf area (\d+) interface (\S+) metric (\d+)'
+                    ],
+                    'show_commands': [
+                        'show route',
+                        'show configuration protocols'
+                    ],
+                    'template': [
+                        'configure',
+                        'set protocols {protocol} area {area} interface {interface}',
+                        'commit'
+                    ]
+                },
+                'acl_config': {
+                    'name': 'ACL 설정',
+                    'patterns': [
+                        r'set firewall family inet filter (\S+) term (\S+) then (accept|reject)',
+                        r'set firewall family inet filter (\S+) term (\S+) from destination-address (\S+)'
+                    ],
+                    'show_commands': [
+                        'show firewall',
+                        'show configuration firewall'
+                    ],
+                    'template': [
+                        'configure',
+                        'set firewall family inet filter {filter_name} term {term_name} then {action}',
+                        'commit'
+                    ]
+                },
+                'snmp_config': {
+                    'name': 'SNMP 설정',
+                    'patterns': [
+                        r'set snmp community (\S+) authorization (read-only|read-write)',
+                        r'set snmp trap-group (\S+) targets (\S+)'
+                    ],
+                    'show_commands': [
+                        'show snmp statistics',
+                        'show configuration snmp'
+                    ],
+                    'template': [
+                        'configure',
+                        'set snmp community {community_name} authorization {access_level}',
+                        'commit'
+                    ]
+                },
+                'ntp_config': {
+                    'name': 'NTP 설정',
+                    'patterns': [
+                        r'set system ntp server (\S+)',
+                        r'set system ntp boot-server (\S+)'
+                    ],
+                    'show_commands': [
+                        'show ntp associations',
+                        'show configuration system ntp'
+                    ],
+                    'template': [
+                        'configure',
+                        'set system ntp server {ntp_server}',
+                        'commit'
+                    ]
                 }
             },
             'hp': {
                 'vlan_config': {
                     'name': 'VLAN 설정',
-                    'commands': [
-                        'configure',
+                    'patterns': [
+                        r'vlan (\d+)',
+                        r'name (.+)'
+                    ],
+                    'show_commands': [
+                        'show vlan',
+                        'show running-config vlan'
+                    ],
+                    'template': [
+                        'config',
                         'vlan {vlan_id}',
                         'name {vlan_name}',
                         'exit'
-                    ],
-                    'parameters': {
-                        'vlan_id': 'VLAN 번호 (1-4094)',
-                        'vlan_name': 'VLAN 이름'
-                    }
+                    ]
                 },
                 'interface_config': {
                     'name': '인터페이스 설정',
@@ -1158,16 +1395,20 @@ def learn_cli():
             'arista': {
                 'vlan_config': {
                     'name': 'VLAN 설정',
-                    'commands': [
+                    'patterns': [
+                        r'vlan (\d+)',
+                        r'name (.+)'
+                    ],
+                    'show_commands': [
+                        'show vlan',
+                        'show running-config | section vlan'
+                    ],
+                    'template': [
                         'configure terminal',
                         'vlan {vlan_id}',
                         'name {vlan_name}',
                         'exit'
-                    ],
-                    'parameters': {
-                        'vlan_id': 'VLAN 번호 (1-4094)',
-                        'vlan_name': 'VLAN 이름'
-                    }
+                    ]
                 },
                 'interface_config': {
                     'name': '인터페이스 설정',
@@ -1188,31 +1429,37 @@ def learn_cli():
             'handreamnet': {
                 'vlan_config': {
                     'name': 'VLAN 설정',
-                    'commands': [
+                    'patterns': [
+                        r'vlan (\d+)',
+                        r'name (.+)'
+                    ],
+                    'show_commands': [
+                        'show vlan',
+                        'show running-config vlan'
+                    ],
+                    'template': [
                         'configure terminal',
                         'vlan {vlan_id}',
                         'name {vlan_name}',
                         'exit'
-                    ],
-                    'parameters': {
-                        'vlan_id': 'VLAN 번호 (1-4094)',
-                        'vlan_name': 'VLAN 이름'
-                    }
+                    ]
                 }
             },
             'coreedge': {
                 'vlan_config': {
                     'name': 'VLAN 설정',
-                    'commands': [
-                        'configure terminal',
-                        'vlan {vlan_id}',
-                        'name {vlan_name}',
-                        'exit'
+                    'patterns': [
+                        r'create vlan (\w+) tag (\d+)',
+                        r'config vlan (\w+) name (.+)'
                     ],
-                    'parameters': {
-                        'vlan_id': 'VLAN 번호 (1-4094)',
-                        'vlan_name': 'VLAN 이름'
-                    }
+                    'show_commands': [
+                        'show vlan',
+                        'show config current_config include vlan'
+                    ],
+                    'template': [
+                        'create vlan {vlan_name} tag {vlan_id}',
+                        'config vlan {vlan_name} name {description}'
+                    ]
                 }
             }
         }
@@ -1556,6 +1803,345 @@ def delete_backup(backup_id):
             'message': '백업 삭제 중 오류가 발생했습니다.'
         }), 500
 
+@app.route('/api/generate-script', methods=['POST'])
+def generate_script():
+    """설정 스크립트 생성"""
+    try:
+        logger.debug("스크립트 생성 요청 받음")
+        data = request.get_json()
+        logger.debug(f"받은 데이터: {data}")
+
+        device_name = data.get('device')
+        task_type = data.get('taskType')
+        params = data.get('params', {})
+
+        if not device_name or not task_type:
+            return jsonify({
+                'status': 'error',
+                'message': '장비와 작업 유형은 필수입니다.'
+            }), 400
+
+        # 장비의 벤더 정보 조회
+        vendor = get_device_vendor(device_name)
+        if not vendor:
+            return jsonify({
+                'status': 'error',
+                'message': f'장비 {device_name}의 벤더 정보를 찾을 수 없습니다.'
+            }), 404
+
+        # 벤더별 명령어 로드
+        vendor_commands = load_vendor_commands()
+        vendor_templates = vendor_commands.get(vendor.lower(), {})
+        
+        if not vendor_templates:
+            return jsonify({
+                'status': 'error',
+                'message': f'{vendor} 벤더의 명령어 템플릿이 없습니다.'
+            }), 404
+
+        # 스크립트 생성
+        script = generate_config_script(task_type, params, vendor_templates)
+        
+        return jsonify({
+            'status': 'success',
+            'script': script,
+            'vendor': vendor
+        })
+
+    except Exception as e:
+        logger.exception("스크립트 생성 중 오류 발생")
+        return jsonify({
+            'status': 'error',
+            'message': f'스크립트 생성 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+def generate_config_script(task_type, params, vendor_templates):
+    """작업 유형별 설정 스크립트 생성"""
+    logger.debug(f"스크립트 생성 시작 - 작업유형: {task_type}, 파라미터: {params}")
+    
+    # 작업 유형별 템플릿 매핑
+    task_templates = vendor_templates.get(task_type, {})
+    if not task_templates:
+        raise ValueError(f'해당 작업 유형의 템플릿이 없습니다: {task_type}')
+
+    script_lines = ['configure terminal']
+
+    try:
+        if task_type == 'vlan':
+            script_lines.extend(generate_vlan_commands(params, task_templates))
+        elif task_type == 'port':
+            script_lines.extend(generate_port_commands(params, task_templates))
+        elif task_type == 'routing':
+            script_lines.extend(generate_routing_commands(params, task_templates))
+        elif task_type == 'security':
+            script_lines.extend(generate_security_commands(params, task_templates))
+        # 다른 작업 유형들에 대한 처리...
+
+        script_lines.append('end')
+        return '\n'.join(filter(None, script_lines))
+
+    except Exception as e:
+        logger.exception(f"{task_type} 스크립트 생성 중 오류")
+        raise ValueError(f'스크립트 생성 오류: {str(e)}')
+
+def generate_vlan_commands(params, templates):
+    """VLAN 설정 명령어 생성"""
+    logger.debug(f"VLAN 명령어 생성 시작 - 파라미터: {params}")
+    
+    # 필수 파라미터 검증
+    action = params.get('vlanAction')
+    if not action:
+        raise ValueError('VLAN 작업 유형을 선택해주세요.')
+
+    vlan_id = params.get('vlanId')
+    if not vlan_id:
+        raise ValueError('VLAN ID를 입력해주세요.')
+
+    try:
+        vlan_id = int(vlan_id)
+        if not (1 <= vlan_id <= 4094):
+            raise ValueError('VLAN ID는 1-4094 범위여야 합니다.')
+    except (TypeError, ValueError):
+        raise ValueError('올바른 VLAN ID를 입력해주세요.')
+
+    commands = []
+    
+    try:
+        # 템플릿이 patterns/template 구조인 경우
+        if 'template' in templates:
+            template_lines = templates['template']
+            if isinstance(template_lines, list):
+                for line in template_lines:
+                    commands.append(line.format(
+                        vlan_id=vlan_id,
+                        vlan_name=params.get('vlanName', f'VLAN{vlan_id}')
+                    ))
+            else:
+                commands.append(template_lines.format(
+                    vlan_id=vlan_id,
+                    vlan_name=params.get('vlanName', f'VLAN{vlan_id}')
+                ))
+            return commands
+
+        # 템플릿이 개별 명령어 구조인 경우
+        if action == 'create':
+            commands.append(f'vlan {vlan_id}')
+            if params.get('vlanName'):
+                commands.append(f'name {params["vlanName"]}')
+                
+        elif action == 'delete':
+            commands.append(f'no vlan {vlan_id}')
+            
+        elif action in ['assign', 'trunk']:
+            interface = params.get('interface')
+            if not interface:
+                raise ValueError('인터페이스를 지정해주세요.')
+            
+            commands.append(f'interface {interface}')
+            
+            if action == 'assign':
+                commands.extend([
+                    'switchport mode access',
+                    f'switchport access vlan {vlan_id}'
+                ])
+            else:
+                commands.extend([
+                    'switchport mode trunk',
+                    f'switchport trunk allowed vlan add {vlan_id}'
+                ])
+        else:
+            raise ValueError(f'지원하지 않는 VLAN 작업 유형입니다: {action}')
+
+        logger.debug(f"생성된 VLAN 명령어: {commands}")
+        return commands
+
+    except Exception as e:
+        logger.error(f"VLAN 명령어 생성 오류: {str(e)}")
+        raise ValueError(f'VLAN 명령어 생성 중 오류가 발생했습니다: {str(e)}')
+
+def generate_port_commands(params, templates):
+    """포트 설정 명령어 생성"""
+    logger.debug(f"포트 명령어 생성 시작 - 파라미터: {params}")
+    
+    # 필수 파라미터 검증
+    action = params.get('portAction')
+    if not action:
+        raise ValueError('포트 작업 유형을 선택해주세요.')
+
+    interface = params.get('interface')
+    if not interface:
+        raise ValueError('인터페이스를 지정해주세요.')
+
+    commands = []
+    
+    try:
+        # 인터페이스 진입
+        interface_template = templates.get('interface', 'interface {interface}')
+        commands.append(interface_template.format(interface=interface))
+
+        if action == 'mode':
+            # 포트 모드 설정
+            port_mode = params.get('portMode')
+            if not port_mode:
+                raise ValueError('포트 모드를 선택해주세요.')
+                
+            mode_template = templates.get(f'mode_{port_mode}', 'switchport mode {port_mode}')
+            commands.append(mode_template)
+
+        elif action == 'speed':
+            # 속도 및 듀플렉스 설정
+            speed = params.get('portSpeed')
+            duplex = params.get('portDuplex')
+            
+            if speed and speed != 'auto':
+                speed_template = templates.get('speed', 'speed {speed}')
+                commands.append(speed_template.format(speed=speed))
+            
+            if duplex and duplex != 'auto':
+                duplex_template = templates.get('duplex', 'duplex {duplex}')
+                commands.append(duplex_template.format(duplex=duplex))
+
+        elif action == 'status':
+            # 포트 상태 설정
+            status = params.get('portStatus')
+            if not status:
+                raise ValueError('포트 상태를 선택해주세요.')
+                
+            if status == 'up':
+                commands.append(templates.get('no_shutdown', 'no shutdown'))
+            else:
+                commands.append(templates.get('shutdown', 'shutdown'))
+
+        logger.debug(f"생성된 포트 명령어: {commands}")
+        return commands
+
+    except KeyError as e:
+        logger.error(f"템플릿 키 오류: {str(e)}")
+        raise ValueError(f'필요한 명령어 템플릿이 없습니다: {str(e)}')
+    except Exception as e:
+        logger.error(f"포트 명령어 생성 오류: {str(e)}")
+        raise ValueError(f'포트 명령어 생성 중 오류가 발생했습니다: {str(e)}')
+
+def generate_routing_commands(params, templates):
+    """라우팅 설정 명령어 생성"""
+    logger.debug(f"라우팅 명령어 생성 시작 - 파라미터: {params}")
+    
+    protocol = params.get('routingProtocol')
+    if not protocol:
+        raise ValueError('라우팅 프로토콜을 선택해주세요.')
+
+    commands = []
+    
+    try:
+        if protocol == 'static':
+            # 정적 라우팅 설정
+            network = params.get('network')
+            mask = params.get('mask')
+            next_hop = params.get('next_hop')
+            
+            if not all([network, mask, next_hop]):
+                raise ValueError('네트워크, 마스크, 넥스트홉 정보가 필요합니다.')
+                
+            static_template = templates.get('static', 'ip route {network} {mask} {next_hop}')
+            commands.append(static_template.format(
+                network=network,
+                mask=mask,
+                next_hop=next_hop
+            ))
+
+        elif protocol in ['ospf', 'eigrp', 'bgp']:
+            # 동적 라우팅 프로토콜 설정
+            if protocol == 'ospf':
+                process_id = params.get('process_id', '1')
+                network = params.get('network')
+                wildcard = params.get('wildcard')
+                area = params.get('area', '0')
+                
+                if not all([network, wildcard]):
+                    raise ValueError('네트워크와 와일드카드 마스크가 필요합니다.')
+                    
+                ospf_template = templates.get('ospf_network')
+                commands.append(ospf_template.format(
+                    process_id=process_id,
+                    network=network,
+                    wildcard=wildcard,
+                    area=area
+                ))
+
+        logger.debug(f"생성된 라우팅 명령어: {commands}")
+        return commands
+
+    except KeyError as e:
+        logger.error(f"템플릿 키 오류: {str(e)}")
+        raise ValueError(f'필요한 명령어 템플릿이 없습니다: {str(e)}')
+    except Exception as e:
+        logger.error(f"라우팅 명령어 생성 오류: {str(e)}")
+        raise ValueError(f'라우팅 명령어 생성 중 오류가 발생했습니다: {str(e)}')
+
+def generate_security_commands(params, templates):
+    """보안 설정 명령어 생성"""
+    logger.debug(f"보안 명령어 생성 시작 - 파라미터: {params}")
+    
+    security_type = params.get('securityType')
+    if not security_type:
+        raise ValueError('보안 설정 유형을 선택해주세요.')
+
+    commands = []
+    
+    try:
+        if security_type == 'port-security':
+            interface = params.get('interface')
+            if not interface:
+                raise ValueError('인터페이스를 지정해주세요.')
+                
+            # 인터페이스 설정 진입
+            commands.append(f'interface {interface}')
+            
+            # 포트 보안 기본 설정
+            commands.append(templates.get('port_security', 'switchport port-security'))
+            
+            # 최대 MAC 주소 수 설정
+            max_addr = params.get('max_addresses')
+            if max_addr:
+                max_template = templates.get('max_mac')
+                commands.append(max_template.format(max_addresses=max_addr))
+            
+            # 위반 모드 설정
+            violation = params.get('violation_mode')
+            if violation:
+                violation_template = templates.get('violation')
+                commands.append(violation_template.format(violation_mode=violation))
+
+        elif security_type == 'acl':
+            # ACL 설정
+            acl_number = params.get('acl_number')
+            action = params.get('action')
+            protocol = params.get('protocol')
+            source = params.get('source')
+            destination = params.get('destination')
+            
+            if not all([acl_number, action, protocol, source, destination]):
+                raise ValueError('ACL 설정에 필요한 모든 정보를 입력해주세요.')
+                
+            acl_template = templates.get('access_list')
+            commands.append(acl_template.format(
+                acl_number=acl_number,
+                action=action,
+                protocol=protocol,
+                source=source,
+                destination=destination
+            ))
+
+        logger.debug(f"생성된 보안 명령어: {commands}")
+        return commands
+
+    except KeyError as e:
+        logger.error(f"템플릿 키 오류: {str(e)}")
+        raise ValueError(f'필요한 명령어 템플릿이 없습니다: {str(e)}')
+    except Exception as e:
+        logger.error(f"보안 명령어 생성 오류: {str(e)}")
+        raise ValueError(f'보안 명령어 생성 중 오류가 발생했습니다: {str(e)}')
+
 # before_first_request 대신 with app.app_context() 사용
 def initialize_app():
     """앱 초기화"""
@@ -1566,7 +2152,94 @@ def initialize_app():
             logger.error("앱 초기화 실패")
 
 # 서버 시작 시 초기화 실행
-init_data_directories()  # 직접 호출
+init_learning_data()  # 직접 호출
+
+def get_device_vendor(device_name):
+    """장비의 벤더 정보 조회"""
+    try:
+        devices_file = DATA_DIR / 'devices' / 'devices.json'
+        if devices_file.exists():
+            with open(devices_file, 'r', encoding='utf-8') as f:
+                devices = json.load(f)
+                device = next((d for d in devices if d['name'] == device_name), None)
+                return device['vendor'] if device else None
+        return None
+    except Exception as e:
+        logger.error(f"장비 벤더 조회 오류: {str(e)}")
+        return None
+
+@app.route('/api/vendor-commands', methods=['GET'])
+def get_vendor_commands():
+    """벤더별 명령어 조회"""
+    commands = load_vendor_commands()
+    return jsonify({
+        'status': 'success',
+        'data': commands
+    })
+
+@app.route('/api/vendor-commands/<vendor>', methods=['POST'])
+def update_vendor_commands(vendor):
+    """벤더별 명령어 업데이트"""
+    try:
+        data = request.get_json()
+        commands = load_vendor_commands()
+        
+        # 벤더 명령어 업데이트
+        commands[vendor.lower()] = data
+        
+        if save_vendor_commands(commands):
+            return jsonify({
+                'status': 'success',
+                'message': f'{vendor} 벤더의 명령어가 업데이트되었습니다.'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': '명령어 저장 중 오류가 발생했습니다.'
+            }), 500
+
+    except Exception as e:
+        logger.exception("벤더 명령어 업데이트 중 오류 발생")
+        return jsonify({
+            'status': 'error',
+            'message': f'명령어 업데이트 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+def update_device_info(device_name, vendor, script_filename):
+    """장비 정보 업데이트"""
+    try:
+        # 장비 정보 로드
+        devices = load_devices()
+        device = next((d for d in devices if d['name'] == device_name), None)
+        
+        if not device:
+            logger.error(f"장비를 찾을 수 없음: {device_name}")
+            return False
+            
+        # 장비 정보 업데이트
+        device['last_script'] = script_filename
+        device['last_updated'] = datetime.now().isoformat()
+        
+        # 장비 정보 저장
+        if save_devices(devices):
+            logger.info(f"장비 정보 업데이트 완료: {device_name}")
+            
+            # 장비별 정보 백업
+            backup_dir = DATA_DIR / 'backups' / 'devices' / f"{device_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 장비 정보 백업
+            with open(backup_dir / 'device_info.json', 'w', encoding='utf-8') as f:
+                json.dump(device, f, ensure_ascii=False, indent=2)
+                
+            return True
+        else:
+            logger.error(f"장비 정보 저장 실패: {device_name}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"장비 정보 업데이트 오류: {str(e)}")
+        return False
 
 if __name__ == '__main__':
     app.run(debug=True) 
