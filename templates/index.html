@@ -3,380 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>네트워크 자동화 도구</title>
-    <!-- Bootstrap CSS -->
+    <title>네트워크 자동화</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
     <div class="container mt-4">
+        <!-- 오류 메시지가 여기에 동적으로 추가됨 -->
+        
         <!-- 탭 메뉴 -->
-        <ul class="nav nav-tabs" role="tablist">
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab" aria-controls="basic" aria-selected="true">기본정보</button>
+                <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab">
+                    기본정보
+                </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" aria-controls="config" aria-selected="false">설정작업</button>
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                    설정작업
+                </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="cli-tab" data-bs-toggle="tab" data-bs-target="#cli" type="button">CLI 학습 및 자동화</button>
+                <button class="nav-link" id="learning-tab" data-bs-toggle="tab" data-bs-target="#learning" type="button" role="tab">
+                    CLI 학습 및 자동화
+                </button>
             </li>
         </ul>
 
-        <!-- 탭 내용 -->
-        <div class="tab-content">
+        <!-- 탭 컨텐츠 -->
+        <div class="tab-content" id="mainTabsContent">
             <!-- 기본정보 탭 -->
-            <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
-                <div class="mt-3">
-                    <div class="mb-3">
-                        <label for="vendor" class="form-label">벤더 선택</label>
-                        <select class="form-control" id="vendor">
-                            <option value="">선택하세요</option>
-                            <option value="cisco">Cisco</option>
-                            <option value="juniper">Juniper</option>
-                            <option value="hp">HP</option>
-                            <option value="arista">Arista</option>
-                            <option value="handreamnet">Handream Networks</option>
-                            <option value="coreedge">CoreEdge Networks</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="deviceName" class="form-label">장비명</label>
-                        <input type="text" class="form-control" id="deviceName">
-                    </div>
-                    <div class="mb-3">
-                        <label for="username" class="form-label">로그인 ID</label>
-                        <input type="text" class="form-control" id="username">
-                    </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">로그인 PW</label>
-                        <input type="password" class="form-control" id="password">
-                    </div>
-                    <div class="mb-3">
-                        <label for="ipAddress" class="form-label">IP 주소</label>
-                        <input type="text" class="form-control" id="ipAddress">
+            <div class="tab-pane fade show active" id="basic" role="tabpanel">
+                <div class="card border-top-0">
+                    <div class="card-body">
+                        <h5 class="card-title">장비 추가</h5>
+                        <form id="deviceForm">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="deviceName" class="form-label">장비 이름</label>
+                                    <input type="text" class="form-control" id="deviceName" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="deviceVendor" class="form-label">벤더</label>
+                                    <select class="form-select" id="deviceVendor" required>
+                                        <option value="">벤더 선택</option>
+                                        <option value="cisco">Cisco</option>
+                                        <option value="juniper">Juniper</option>
+                                        <option value="hp">HP</option>
+                                        <option value="arista">Arista</option>
+                                        <option value="handreamnet">한드림넷</option>
+                                        <option value="coreedge">코어엣지네트웍스</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="deviceIP" class="form-label">IP 주소</label>
+                                    <input type="text" class="form-control" id="deviceIP" required>
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-primary">장비 추가</button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div class="mt-4">
+                            <h5>등록된 장비 목록</h5>
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>장비 이름</th>
+                                            <th>벤더</th>
+                                            <th>IP</th>
+                                            <th>작업</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deviceListBasic">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- 설정작업 탭 -->
-            <div class="tab-pane fade" id="config" role="tabpanel">
-                <div class="mt-3">
-                    <h5 class="mb-3">설정 작업</h5>
-                    
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>설정 작업 선택</h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- VLAN 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="vlanConfig">
-                                    <label class="form-check-label h6" for="vlanConfig">VLAN 생성/삭제</label>
-                                </div>
-                                <div id="vlanConfigInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="vlanId">VLAN ID</label>
-                                        <input type="text" class="form-control" id="vlanId" placeholder="예: 10">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="vlanName">VLAN 이름</label>
-                                        <input type="text" class="form-control" id="vlanName" placeholder="예: VLAN10">
-                                    </div>
-                                </div>
+            <div class="tab-pane fade" id="settings" role="tabpanel">
+                <div class="card border-top-0">
+                    <div class="card-body">
+                        <h5 class="card-title">설정 작업</h5>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="configDevice" class="form-label">장비 선택</label>
+                                <select class="form-select" id="configDevice">
+                                    <option value="">장비 선택</option>
+                                </select>
                             </div>
-
-                            <!-- 인터페이스 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="interfaceConfig">
-                                    <label class="form-check-label h6" for="interfaceConfig">인터페이스 설정</label>
-                                </div>
-                                <div id="interfaceConfigInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="interfaceName">인터페이스 이름</label>
-                                        <input type="text" class="form-control" id="interfaceName" placeholder="예: GigabitEthernet1/0/1">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="interfaceDesc">설명</label>
-                                        <input type="text" class="form-control" id="interfaceDesc" placeholder="인터페이스 설명">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="interfaceStatus">상태</label>
-                                        <select class="form-control" id="interfaceStatus">
-                                            <option value="up">Up</option>
-                                            <option value="down">Down</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- VLAN 인터페이스 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="vlanInterface">
-                                    <label class="form-check-label h6" for="vlanInterface">VLAN 인터페이스 설정</label>
-                                </div>
-                                <div id="vlanInterfaceInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="vlanInterfaceName">인터페이스 이름</label>
-                                        <input type="text" class="form-control" id="vlanInterfaceName" placeholder="예: GigabitEthernet1/0/1">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="interfaceMode">모드</label>
-                                        <select class="form-control" id="interfaceMode">
-                                            <option value="access">Access</option>
-                                            <option value="trunk">Trunk</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="interfaceVlanId">VLAN ID</label>
-                                        <input type="text" class="form-control" id="interfaceVlanId" placeholder="예: 10">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- IP 주소 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="ipConfig">
-                                    <label class="form-check-label h6" for="ipConfig">IP 주소 설정</label>
-                                </div>
-                                <div id="ipConfigInputs" class="task-inputs">
-                                    <div class="form-group">
-                                        <label for="scriptIpAddress">IP 주소</label>
-                                        <input type="text" class="form-control" id="scriptIpAddress" placeholder="예: 192.168.1.1">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="subnetMask">서브넷 마스크</label>
-                                        <input type="text" class="form-control" id="subnetMask" placeholder="예: 255.255.255.0">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 라우팅 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="routingConfig">
-                                    <label class="form-check-label h6" for="routingConfig">라우팅 설정</label>
-                                </div>
-                                <div id="routingConfigInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="routingProtocol">라우팅 프로토콜</label>
-                                        <select class="form-control" id="routingProtocol">
-                                            <option value="static">Static</option>
-                                            <option value="ospf">OSPF</option>
-                                            <option value="bgp">BGP</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="networkAddress">네트워크 주소</label>
-                                        <input type="text" class="form-control" id="networkAddress" placeholder="예: 192.168.1.0/24">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- ACL 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="aclConfig">
-                                    <label class="form-check-label h6" for="aclConfig">ACL 설정</label>
-                                </div>
-                                <div id="aclConfigInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="aclNumber">ACL 번호</label>
-                                        <input type="text" class="form-control" id="aclNumber" placeholder="예: 100">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="aclType">ACL 타입</label>
-                                        <select class="form-control" id="aclType">
-                                            <option value="standard">Standard</option>
-                                            <option value="extended">Extended</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="aclRule">ACL 규칙</label>
-                                        <input type="text" class="form-control" id="aclRule" placeholder="예: permit ip any any">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- SNMP 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="snmpConfig">
-                                    <label class="form-check-label h6" for="snmpConfig">SNMP 설정</label>
-                                </div>
-                                <div id="snmpConfigInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="snmpCommunity">Community String</label>
-                                        <input type="text" class="form-control" id="snmpCommunity" placeholder="예: public">
-                                    </div>
-                                    <div class="form-group mb-2">
-                                        <label for="snmpVersion">SNMP 버전</label>
-                                        <select class="form-control" id="snmpVersion">
-                                            <option value="v2c">v2c</option>
-                                            <option value="v3">v3</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- NTP 설정 -->
-                            <div class="task-section mb-4">
-                                <div class="form-check mb-2">
-                                    <input type="checkbox" class="form-check-input" id="ntpConfig">
-                                    <label class="form-check-label h6" for="ntpConfig">NTP 설정</label>
-                                </div>
-                                <div id="ntpConfigInputs" class="task-inputs">
-                                    <div class="form-group mb-2">
-                                        <label for="ntpServer">NTP 서버</label>
-                                        <input type="text" class="form-control" id="ntpServer" placeholder="예: 0.pool.ntp.org">
-                                    </div>
-                                </div>
+                            <div class="col-md-6">
+                                <label for="configType" class="form-label">작업 유형</label>
+                                <select class="form-select" id="configType">
+                                    <option value="">작업 선택</option>
+                                    <option value="vlan_config">VLAN 설정</option>
+                                    <option value="interface_config">인터페이스 설정</option>
+                                    <option value="ip_config">IP 주소 설정</option>
+                                    <option value="routing_config">라우팅 설정</option>
+                                    <option value="acl_config">ACL 설정</option>
+                                    <option value="snmp_config">SNMP 설정</option>
+                                    <option value="ntp_config">NTP 설정</option>
+                                </select>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- 작업 버튼 -->
-                    <div class="mt-3">
-                        <button type="button" 
-                                class="btn btn-primary mt-3" 
-                                id="createScriptBtn">
-                            스크립트 생성
-                        </button>
-                    </div>
+                        <div id="configParams" class="mt-3">
+                            <!-- 작업 유형별 파라미터 폼이 동적으로 추가됨 -->
+                        </div>
 
-                    <!-- 스크립트 표시 영역 -->
-                    <div class="mt-4">
-                        <h6>생성된 스크립트</h6>
-                        <pre id="generatedScript" class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto;"></pre>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-primary" id="generateScript">스크립트 생성</button>
+                        </div>
+
+                        <div id="scriptResult" class="mt-3" style="display: none;">
+                            <h6>생성된 스크립트:</h6>
+                            <pre class="bg-light p-3 rounded"><code id="scriptContent"></code></pre>
+                            <button type="button" class="btn btn-success" id="executeScript">스크립트 실행</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- CLI 학습 및 자동화 탭 -->
-            <div class="tab-pane fade" id="cli" role="tabpanel">
-                <div class="mt-3">
-                    <!-- 자동학습 섹션 -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">자동 학습</h5>
+            <div class="tab-pane fade" id="learning" role="tabpanel">
+                <div class="card border-top-0">
+                    <div class="card-body">
+                        <h5 class="card-title">자동 학습</h5>
+                        <!-- 자동학습 섹션 -->
+                        <div class="mb-3">
+                            <label for="learningVendor" class="form-label">벤더 선택</label>
+                            <select class="form-select" id="learningVendor">
+                                <option value="">벤더를 선택하세요</option>
+                                <option value="cisco">Cisco</option>
+                                <option value="juniper">Juniper</option>
+                                <option value="hp">HP</option>
+                                <option value="arista">Arista</option>
+                                <option value="handreamnet">한드림넷</option>
+                                <option value="coreedge">코어엣지네트웍스</option>
+                            </select>
                         </div>
-                        <div class="card-body">
-                            <!-- 벤더 선택 -->
-                            <div class="mb-3">
-                                <label for="learningVendor" class="form-label">벤더 선택</label>
-                                <select class="form-select" id="learningVendor">
-                                    <option value="">벤더를 선택하세요</option>
-                                    <option value="cisco">Cisco</option>
-                                    <option value="arista">Arista</option>
-                                    <option value="juniper">Juniper</option>
-                                    <option value="hp">HP</option>
-                                    <option value="coreedge">CoreEdge Networks</option>
-                                    <option value="handreamnet">한드림넷</option>
-                                </select>
-                            </div>
 
-                            <!-- 시작 버튼 -->
-                            <div class="mb-3">
-                                <button class="btn btn-primary w-100" id="startLearning" disabled>
-                                    <i class="bi bi-play-circle"></i> 자동 학습 시작
-                                </button>
-                            </div>
+                        <button type="button" class="btn btn-primary w-100" id="startLearning" disabled>
+                            자동 학습 시작
+                        </button>
 
-                            <!-- 진행 상태 -->
-                            <div id="learningProgress" style="display: none;">
-                                <div class="progress mb-2">
-                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        <div id="learningProgress" class="mt-3" style="display: none;">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" 
+                                     style="width: 0%">
                                 </div>
-                                <div class="learning-status text-center text-muted small"></div>
-                            </div>
-
-                            <!-- 결과 표시 -->
-                            <div id="learningResult" style="display: none;">
-                                <div class="result-content"></div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- 장비 목록 -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <h5 class="card-title mb-0">장비 목록</h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>장비 이름</th>
-                                <th>장비 유형</th>
-                                <th>IP</th>
-                                <th>작업</th>
-                            </tr>
-                        </thead>
-                        <tbody id="deviceTableBody">
-                            <!-- 장비 목록이 여기에 동적으로 추가됨 -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+                        <div id="learningResult" class="mt-3"></div>
 
-        <!-- 스크립트 보기 모달 -->
-        <div class="modal fade" id="scriptViewModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">스크립트 내용</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <pre><code id="scriptContent"></code></pre>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                        <!-- 장비 목록 섹션 -->
+                        <div class="mt-4">
+                            <h5>장비 목록</h5>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>장비 이름</th>
+                                            <th>벤더</th>
+                                            <th>IP</th>
+                                            <th>작업</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deviceList">
+                                        <!-- 장비 목록이 여기에 동적으로 추가됨 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap JS -->
+    <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-
-    <style>
-    .task-section {
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        padding: 15px;
-        background-color: #f8f9fa;
-    }
-
-    .task-inputs {
-        margin-left: 20px;
-        margin-top: 10px;
-        padding: 10px;
-        background-color: white;
-        border-radius: 4px;
-    }
-
-    .form-check-label.h6 {
-        margin-bottom: 0;
-    }
-    </style>
-
-    <!-- 페이지 맨 아래에 추가 -->
-    <div id="toastContainer" class="position-fixed bottom-0 end-0 p-3" style="z-index: 11"></div>
 </body>
 </html>
 
