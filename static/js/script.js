@@ -161,6 +161,227 @@ const AUTO_LEARNING = {
     VENDORS: ['cisco', 'juniper', 'hp', 'arista', 'handreamnet', 'coreedge']
 };
 
+// 작업 유형별 템플릿 정의
+const taskTemplates = {
+    vlan: `
+        <form id="vlanForm" class="task-form">
+            <div class="mb-3">
+                <label class="form-label">VLAN 작업 선택</label>
+                <select class="form-select" name="vlanAction" id="vlanAction">
+                    <option value="">작업을 선택하세요</option>
+                    <option value="create">VLAN 생성</option>
+                    <option value="delete">VLAN 삭제</option>
+                    <option value="assign">인터페이스 VLAN 할당</option>
+                    <option value="trunk">트렁크 설정</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">VLAN ID</label>
+                <input type="number" class="form-control" name="vlanId" min="1" max="4094" required>
+            </div>
+            <div class="mb-3 vlan-name-group">
+                <label class="form-label">VLAN 이름</label>
+                <input type="text" class="form-control" name="vlanName">
+            </div>
+            <div class="mb-3 interface-group">
+                <label class="form-label">인터페이스</label>
+                <input type="text" class="form-control" name="interface" placeholder="예: GigabitEthernet0/1">
+            </div>
+        </form>
+    `,
+    
+    port: `
+        <form id="portForm" class="task-form">
+            <div class="mb-3">
+                <label class="form-label">포트 작업 선택</label>
+                <select class="form-select" name="portAction" id="portAction" required>
+                    <option value="">작업을 선택하세요</option>
+                    <option value="mode">액세스/트렁크 모드 설정</option>
+                    <option value="speed">포트 속도/듀플렉스 조정</option>
+                    <option value="status">인터페이스 활성화/비활성화</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">인터페이스</label>
+                <input type="text" class="form-control" name="interface" placeholder="예: GigabitEthernet0/1" required>
+            </div>
+            <div class="mb-3 port-settings">
+                <!-- 동적으로 추가될 설정 필드 -->
+            </div>
+        </form>
+    `,
+
+    routing: `
+        <form id="routingForm" class="task-form">
+            <div class="mb-3">
+                <label class="form-label">라우팅 프로토콜</label>
+                <select class="form-select" name="routingProtocol" id="routingProtocol" required>
+                    <option value="">프로토콜을 선택하세요</option>
+                    <option value="static">Static Route</option>
+                    <option value="ospf">OSPF</option>
+                    <option value="eigrp">EIGRP</option>
+                    <option value="bgp">BGP</option>
+                </select>
+            </div>
+            <div id="routingDetails">
+                <!-- 선택된 프로토콜에 따라 동적으로 변경됨 -->
+            </div>
+        </form>
+    `,
+
+    security: `
+        <form id="securityForm" class="task-form">
+            <div class="mb-3">
+                <label class="form-label">보안 설정 유형</label>
+                <select class="form-select" name="securityType" id="securityType" required>
+                    <option value="">설정 유형을 선택하세요</option>
+                    <option value="port-security">Port Security</option>
+                    <option value="ssh">SSH 설정</option>
+                    <option value="acl">ACL 설정</option>
+                    <option value="aaa">AAA 인증</option>
+                </select>
+            </div>
+            <div id="securityDetails">
+                <!-- 선택된 보안 유형에 따라 동적으로 변경됨 -->
+            </div>
+        </form>
+    `
+    // 다른 작업 유형들도 비슷한 방식으로 추가...
+};
+
+// 작업 유형 변경 이벤트 핸들러
+function handleTaskTypeChange() {
+    console.log('작업 유형 변경 감지');
+    const taskType = document.getElementById('taskType');
+    const taskDetails = document.getElementById('taskDetails');
+    const generateScriptBtn = document.getElementById('generateScript');
+
+    if (!taskType || !taskDetails) {
+        console.error('필요한 DOM 요소를 찾을 수 없습니다.');
+        return;
+    }
+
+    console.log('선택된 작업 유형:', taskType.value);
+
+    if (taskType.value && taskTemplates[taskType.value]) {
+        taskDetails.innerHTML = taskTemplates[taskType.value];
+        generateScriptBtn.disabled = false;
+
+        // 작업 유형별 추가 이벤트 리스너 설정
+        setupTaskSpecificListeners(taskType.value);
+    } else {
+        taskDetails.innerHTML = '<p class="text-muted">작업 유형을 선택하세요.</p>';
+        generateScriptBtn.disabled = true;
+    }
+}
+
+// 작업 유형별 추가 이벤트 리스너 설정
+function setupTaskSpecificListeners(taskType) {
+    console.log('작업별 리스너 설정:', taskType);
+    
+    switch (taskType) {
+        case 'vlan':
+            setupVlanListeners();
+            break;
+        case 'port':
+            setupPortListeners();
+            break;
+        case 'routing':
+            setupRoutingListeners();
+            break;
+        case 'security':
+            setupSecurityListeners();
+            break;
+        // 다른 작업 유형들에 대한 처리 추가...
+    }
+}
+
+// VLAN 관련 이벤트 리스너
+function setupVlanListeners() {
+    const vlanAction = document.getElementById('vlanAction');
+    if (vlanAction) {
+        vlanAction.addEventListener('change', function() {
+            const vlanNameGroup = document.querySelector('.vlan-name-group');
+            const interfaceGroup = document.querySelector('.interface-group');
+
+            // 선택된 작업에 따라 필요한 필드 표시/숨김
+            switch (this.value) {
+                case 'create':
+                    vlanNameGroup.style.display = 'block';
+                    interfaceGroup.style.display = 'none';
+                    break;
+                case 'assign':
+                case 'trunk':
+                    vlanNameGroup.style.display = 'none';
+                    interfaceGroup.style.display = 'block';
+                    break;
+                case 'delete':
+                    vlanNameGroup.style.display = 'none';
+                    interfaceGroup.style.display = 'none';
+                    break;
+            }
+        });
+    }
+}
+
+// 포트 설정 관련 이벤트 리스너
+function setupPortListeners() {
+    const portAction = document.getElementById('portAction');
+    if (portAction) {
+        portAction.addEventListener('change', function() {
+            const portSettings = document.querySelector('.port-settings');
+            let settingsHTML = '';
+
+            switch (this.value) {
+                case 'mode':
+                    settingsHTML = `
+                        <div class="mb-3">
+                            <label class="form-label">포트 모드</label>
+                            <select class="form-select" name="portMode" required>
+                                <option value="access">Access</option>
+                                <option value="trunk">Trunk</option>
+                            </select>
+                        </div>
+                    `;
+                    break;
+                case 'speed':
+                    settingsHTML = `
+                        <div class="mb-3">
+                            <label class="form-label">속도 설정</label>
+                            <select class="form-select" name="portSpeed" required>
+                                <option value="auto">Auto</option>
+                                <option value="10">10 Mbps</option>
+                                <option value="100">100 Mbps</option>
+                                <option value="1000">1 Gbps</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">듀플렉스 모드</label>
+                            <select class="form-select" name="portDuplex" required>
+                                <option value="auto">Auto</option>
+                                <option value="full">Full</option>
+                                <option value="half">Half</option>
+                            </select>
+                        </div>
+                    `;
+                    break;
+                case 'status':
+                    settingsHTML = `
+                        <div class="mb-3">
+                            <label class="form-label">포트 상태</label>
+                            <select class="form-select" name="portStatus" required>
+                                <option value="up">활성화 (no shutdown)</option>
+                                <option value="down">비활성화 (shutdown)</option>
+                            </select>
+                        </div>
+                    `;
+                    break;
+            }
+            portSettings.innerHTML = settingsHTML;
+        });
+    }
+}
+
 // 페이지 로드 시 실행되는 초기화 함수
 document.addEventListener('DOMContentLoaded', function() {
     console.log('페이지 초기화 시작');
@@ -193,6 +414,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 백업 목록 로드
     loadBackupList();
+    
+    // 작업 유형 변경 이벤트 리스너 등록
+    const taskType = document.getElementById('taskType');
+    if (taskType) {
+        taskType.addEventListener('change', handleTaskTypeChange);
+        console.log('작업 유형 선택 이벤트 리스너 등록됨');
+    }
     
     console.log('페이지 초기화 완료');
 });
@@ -568,17 +796,11 @@ async function handleDeviceSubmit(event) {
     }
 }
 
-// 장비 목록 로드 함수
+// 장비 목록 로드 및 드롭다운 업데이트 함수
 async function loadDeviceList() {
     console.log('장비 목록 로드 시작');
     try {
-        const response = await fetch('/api/devices', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-
+        const response = await fetch('/api/devices');
         const result = await response.json();
         console.log('받은 데이터:', result);
 
@@ -586,8 +808,12 @@ async function loadDeviceList() {
             throw new Error(result.message || '장비 목록 로드 실패');
         }
 
-        // 장비 목록 테이블 업데이트
-        updateDeviceList(result.data);
+        // 기본 정보 탭의 테이블 업데이트
+        updateDeviceTable(result.data);
+        
+        // 설정 작업 탭의 드롭다운 업데이트
+        updateDeviceDropdown(result.data);
+        
         console.log('장비 목록 로드 완료');
 
     } catch (error) {
@@ -596,17 +822,15 @@ async function loadDeviceList() {
     }
 }
 
-// 장비 목록 테이블 업데이트
-function updateDeviceList(devices) {
-    console.log('장비 목록 업데이트 시작');
-    const tbody = document.querySelector('#deviceListBasic');
+// 장비 목록 테이블 업데이트 함수
+function updateDeviceTable(devices) {
+    const tbody = document.getElementById('deviceListBasic');
     if (!tbody) {
-        console.error('장비 목록 테이블을 찾을 수 없습니다.');
+        console.log('장비 목록 테이블 요소를 찾을 수 없습니다.');
         return;
     }
 
-    // 데이터가 없거나 빈 배열인 경우
-    if (!devices || devices.length === 0) {
+    if (!Array.isArray(devices) || devices.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" class="text-center">
@@ -617,188 +841,47 @@ function updateDeviceList(devices) {
         return;
     }
 
-    // 장비 목록 생성
-    try {
-        tbody.innerHTML = devices.map((device, index) => `
-            <tr>
-                <td class="text-center">${index + 1}</td>
-                <td>${device.name || ''}</td>
-                <td>${device.vendor || ''}</td>
-                <td>${device.ip || ''}</td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-danger" 
-                            onclick="deleteDevice('${device.name}')" 
-                            title="장비 삭제">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-        
-        console.log('장비 목록 업데이트 완료');
-    } catch (error) {
-        console.error('장비 목록 업데이트 중 오류:', error);
-        showMessage('장비 목록 업데이트 중 오류가 발생했습니다.', 'danger');
-    }
+    tbody.innerHTML = devices.map((device, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${device.name || ''}</td>
+            <td>${device.vendor || ''}</td>
+            <td>${device.ip || ''}</td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="deleteDevice('${device.name}')">
+                    삭제
+                </button>
+            </td>
+        </tr>
+    `).join('');
 }
 
-// 장비 선택 드롭다운 업데이트
-function updateDeviceSelect(devices) {
-    const select = document.getElementById('configDevice');
-    if (!select) return;
+// 설정 작업 탭의 장비 선택 드롭다운 업데이트 함수
+function updateDeviceDropdown(devices) {
+    const deviceSelect = document.getElementById('deviceSelect');
+    if (!deviceSelect) {
+        console.log('장비 선택 드롭다운 요소를 찾을 수 없습니다.');
+        return;
+    }
 
+    // 기존 옵션 제거 (첫 번째 기본 옵션 유지)
+    while (deviceSelect.options.length > 1) {
+        deviceSelect.remove(1);
+    }
+
+    // 장비 목록이 비어있는 경우 처리
     if (!Array.isArray(devices) || devices.length === 0) {
-        select.innerHTML = '<option value="">등록된 장비가 없습니다</option>';
-        select.disabled = true;
+        deviceSelect.innerHTML = '<option value="">등록된 장비가 없습니다</option>';
         return;
     }
 
-    select.disabled = false;
-    select.innerHTML = `
-        <option value="">장비 선택</option>
-        ${devices.map(device => `
-            <option value="${device.name}">${device.name} (${device.ip})</option>
-        `).join('')}
-    `;
-}
-
-// 설정작업 탭 기능
-function handleConfigTypeChange() {
-    const configType = document.getElementById('configType').value;
-    const paramsDiv = document.getElementById('configParams');
-    
-    if (!configType || !paramsDiv) return;
-
-    // 작업 유형별 파라미터 폼 생성
-    const paramsHTML = getConfigParamsHTML(configType);
-    paramsDiv.innerHTML = paramsHTML;
-}
-
-// 작업 유형별 파라미터 폼 HTML 생성
-function getConfigParamsHTML(configType) {
-    const params = {
-        vlan_config: [
-            { name: 'vlan_id', label: 'VLAN ID', type: 'number' },
-            { name: 'vlan_name', label: 'VLAN 이름', type: 'text' }
-        ],
-        interface_config: [
-            { name: 'interface_name', label: '인터페이스', type: 'text' },
-            { name: 'interface_desc', label: '설명', type: 'text' },
-            { name: 'interface_status', label: '상태', type: 'select', options: ['no shutdown', 'shutdown'] }
-        ],
-        // 다른 설정 유형들의 파라미터도 추가...
-    };
-
-    if (!params[configType]) return '';
-
-    return `
-        <div class="row g-3">
-            ${params[configType].map(param => `
-                <div class="col-md-6">
-                    <label for="${param.name}" class="form-label">${param.label}</label>
-                    ${param.type === 'select' 
-                        ? `<select class="form-select" id="${param.name}">
-                            ${param.options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
-                           </select>`
-                        : `<input type="${param.type}" class="form-control" id="${param.name}">`
-                    }
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
-
-// 스크립트 생성 처리
-async function handleGenerateScript() {
-    const device = document.getElementById('configDevice').value;
-    const configType = document.getElementById('configType').value;
-    
-    if (!device || !configType) {
-        alert('장비와 작업 유형을 선택해주세요.');
-        return;
-    }
-
-    // 파라미터 수집
-    const params = collectConfigParams(configType);
-
-    try {
-        const response = await fetch('/api/generate-script', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                device,
-                config_type: configType,
-                params
-            })
-        });
-
-        const result = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(result.message || '스크립트 생성 실패');
-        }
-
-        // 생성된 스크립트 표시
-        const scriptContent = document.getElementById('scriptContent');
-        const scriptResult = document.getElementById('scriptResult');
-        
-        if (scriptContent && scriptResult) {
-            scriptContent.textContent = result.script;
-            scriptResult.style.display = 'block';
-        }
-
-    } catch (error) {
-        console.error('스크립트 생성 오류:', error);
-        alert('스크립트 생성 중 오류가 발생했습니다.');
-    }
-}
-
-// 설정 파라미터 수집
-function collectConfigParams(configType) {
-    const params = {};
-    const paramsDiv = document.getElementById('configParams');
-    
-    if (!paramsDiv) return params;
-
-    // 모든 input과 select 요소의 값을 수집
-    paramsDiv.querySelectorAll('input, select').forEach(element => {
-        params[element.id] = element.value;
+    // 장비 목록 추가
+    devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.name;
+        option.textContent = `${device.name} (${device.ip})`;
+        deviceSelect.appendChild(option);
     });
-
-    return params;
-}
-
-// 스크립트 실행 처리
-async function handleExecuteScript() {
-    const device = document.getElementById('configDevice').value;
-    const scriptContent = document.getElementById('scriptContent').textContent;
-
-    try {
-        const response = await fetch('/api/execute-script', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                device,
-                script: scriptContent
-            })
-        });
-
-        const result = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(result.message || '스크립트 실행 실패');
-        }
-
-        alert('스크립트가 성공적으로 실행되었습니다.');
-
-    } catch (error) {
-        console.error('스크립트 실행 오류:', error);
-        alert('스크립트 실행 중 오류가 발생했습니다.');
-    }
 }
 
 // 자동학습 처리 함수

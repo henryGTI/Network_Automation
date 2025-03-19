@@ -90,43 +90,90 @@
 
             <!-- 설정작업 탭 -->
             <div class="tab-pane fade" id="settings" role="tabpanel">
-                <div class="card border-top-0">
-                    <div class="card-body">
-                        <h5 class="card-title">설정 작업</h5>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label for="configDevice" class="form-label">장비 선택</label>
-                                <select class="form-select" id="configDevice">
-                                    <option value="">장비 선택</option>
-                                </select>
+                <div class="row">
+                    <!-- 장비 선택 및 작업 유형 선택 -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">장비 및 작업 선택</h5>
                             </div>
-                            <div class="col-md-6">
-                                <label for="configType" class="form-label">작업 유형</label>
-                                <select class="form-select" id="configType">
-                                    <option value="">작업 선택</option>
-                                    <option value="vlan_config">VLAN 설정</option>
-                                    <option value="interface_config">인터페이스 설정</option>
-                                    <option value="ip_config">IP 주소 설정</option>
-                                    <option value="routing_config">라우팅 설정</option>
-                                    <option value="acl_config">ACL 설정</option>
-                                    <option value="snmp_config">SNMP 설정</option>
-                                    <option value="ntp_config">NTP 설정</option>
-                                </select>
+                            <div class="card-body">
+                                <form id="configForm">
+                                    <!-- 장비 선택 -->
+                                    <div class="mb-3">
+                                        <label for="deviceSelect" class="form-label">장비 선택</label>
+                                        <select class="form-select" id="deviceSelect" required>
+                                            <option value="">장비를 선택하세요</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- 작업 유형 선택 -->
+                                    <div class="mb-3">
+                                        <label for="taskType" class="form-label">작업 유형</label>
+                                        <select class="form-select" id="taskType" required>
+                                            <option value="">작업 유형을 선택하세요</option>
+                                            <option value="vlan">VLAN 관리</option>
+                                            <option value="port">포트 설정</option>
+                                            <option value="routing">라우팅 설정</option>
+                                            <option value="security">보안 설정</option>
+                                            <option value="stp_lacp">STP 및 LACP</option>
+                                            <option value="qos">QoS 및 트래픽 제어</option>
+                                            <option value="route_monitor">라우팅 상태 모니터링</option>
+                                            <option value="network_check">네트워크 상태 점검</option>
+                                            <option value="logging">로그 수집</option>
+                                            <option value="backup">구성 백업 및 복원</option>
+                                            <option value="snmp">SNMP 및 모니터링</option>
+                                            <option value="automation">자동화 스크립트 확장</option>
+                                        </select>
+                                    </div>
+                                </form>
                             </div>
                         </div>
+                    </div>
 
-                        <div id="configParams" class="mt-3">
-                            <!-- 작업 유형별 파라미터 폼이 동적으로 추가됨 -->
+                    <!-- 작업 상세 설정 -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">작업 상세 설정</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="taskDetails">
+                                    <!-- 작업 유형별 상세 설정이 여기에 동적으로 로드됩니다 -->
+                                </div>
+                            </div>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="mt-3">
-                            <button type="button" class="btn btn-primary" id="generateScript">스크립트 생성</button>
+                <!-- 스크립트 생성 및 실행 버튼 -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <button type="button" class="btn btn-primary me-2" id="generateScript" disabled>
+                                    스크립트 생성
+                                </button>
+                                <button type="button" class="btn btn-success" id="executeScript" disabled>
+                                    실행
+                                </button>
+                            </div>
                         </div>
+                    </div>
+                </div>
 
-                        <div id="scriptResult" class="mt-3" style="display: none;">
-                            <h6>생성된 스크립트:</h6>
-                            <pre class="bg-light p-3 rounded"><code id="scriptContent"></code></pre>
-                            <button type="button" class="btn btn-success" id="executeScript">스크립트 실행</button>
+                <!-- 생성된 스크립트 표시 영역 -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">생성된 스크립트</h5>
+                            </div>
+                            <div class="card-body">
+                                <pre id="generatedScript" class="bg-light p-3 rounded">
+                                    <!-- 생성된 스크립트가 여기에 표시됩니다 -->
+                                </pre>
+                            </div>
                         </div>
                     </div>
                 </div>
