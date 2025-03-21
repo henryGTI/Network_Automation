@@ -162,4 +162,34 @@ def update_device(device_name):
         return jsonify({
             'status': 'error',
             'message': f'장비 수정 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+@app.route('/api/generate-script', methods=['POST'])
+def generate_script():
+    try:
+        data = request.json
+        # TODO: 실제 스크립트 생성 로직 구현
+        return jsonify({
+            'status': 'success',
+            'script': '# Generated Script\n# TODO: Implement script generation'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/learn-command', methods=['POST'])
+def learn_command():
+    try:
+        data = request.json
+        # TODO: 실제 명령어 학습 로직 구현
+        return jsonify({
+            'status': 'success',
+            'result': f'Learning result for {data["device"]}: {data["command"]}\n# TODO: Implement learning logic'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
         }), 500 

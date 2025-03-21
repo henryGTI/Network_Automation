@@ -3,7 +3,7 @@
     {
       "name": "test_lab_1",
       "ip": "192.168.1.1",
-      "vendor": "coreedge",
+      "vendor": "handreamnet",
       "model": "C3300-24FS"
     }
   ]

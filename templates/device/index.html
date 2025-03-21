@@ -11,15 +11,94 @@
     <div class="container mt-4">
         <h1 class="text-center mb-4">네트워크 자동화 도구</h1>
         
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">장비 관리</h2>
-                    </div>
+        <!-- 탭 메뉴 -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="devices-tab" data-bs-toggle="tab" 
+                        data-bs-target="#devices-content" type="button" role="tab">장비 관리</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="config-tab" data-bs-toggle="tab" 
+                        data-bs-target="#config-content" type="button" role="tab">설정 작업</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="learning-tab" data-bs-toggle="tab" 
+                        data-bs-target="#learning-content" type="button" role="tab">자동 학습</button>
+            </li>
+        </ul>
+
+        <!-- 탭 내용 -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- 장비 관리 탭 -->
+            <div class="tab-pane fade show active" id="devices-content" role="tabpanel">
+                <div class="card mt-3">
                     <div class="card-body">
                         <div id="device-form"></div>
                         <div id="devices" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 설정 작업 탭 -->
+            <div class="tab-pane fade" id="config-content" role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3>설정 작업</h3>
+                        <div id="config-form" class="mt-3">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">작업 유형</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="vlan" id="vlanCheck">
+                                        <label class="form-check-label" for="vlanCheck">VLAN 설정</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="port" id="portCheck">
+                                        <label class="form-check-label" for="portCheck">포트 설정</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="routing" id="routingCheck">
+                                        <label class="form-check-label" for="routingCheck">라우팅 설정</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="deviceSelect" class="form-label">대상 장비</label>
+                                    <select class="form-select" id="deviceSelect" multiple>
+                                        <!-- 장비 목록은 JavaScript로 동적 추가 -->
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="config-details"></div>
+                            <button type="button" class="btn btn-primary" id="generateScript">스크립트 생성</button>
+                        </div>
+                        <div id="script-output" class="mt-3">
+                            <textarea class="form-control" id="generatedScript" rows="10" readonly></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 자동 학습 탭 -->
+            <div class="tab-pane fade" id="learning-content" role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3>자동 학습</h3>
+                        <div id="learning-form" class="mt-3">
+                            <div class="mb-3">
+                                <label for="learningDevice" class="form-label">학습 대상 장비</label>
+                                <select class="form-select" id="learningDevice">
+                                    <!-- 장비 목록은 JavaScript로 동적 추가 -->
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="learningCommand" class="form-label">실행 명령어</label>
+                                <input type="text" class="form-control" id="learningCommand">
+                            </div>
+                            <button type="button" class="btn btn-primary" id="startLearning">학습 시작</button>
+                        </div>
+                        <div id="learning-result" class="mt-3">
+                            <textarea class="form-control" id="learningOutput" rows="10" readonly></textarea>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -28,5 +107,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/device.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/config.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/learning.js') }}"></script>
 </body>
 </html>
