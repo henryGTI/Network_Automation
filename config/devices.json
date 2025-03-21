@@ -1,0 +1,10 @@
+{
+  "devices": [
+    {
+      "name": "test_lab_1",
+      "ip": "192.168.1.1",
+      "vendor": "coreedge",
+      "model": "C3300-24FS"
+    }
+  ]
+}
