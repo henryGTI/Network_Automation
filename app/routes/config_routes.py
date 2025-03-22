@@ -139,87 +139,115 @@ def delete_task_type(task_type_id):
 
 @bp.route('/api/subtasks/<task_type>', methods=['GET'])
 def get_subtasks(task_type):
-    """특정 작업 유형에 해당하는 상세 작업 목록을 반환합니다."""
+    """특정 작업 유형에 대한 하위 작업 목록을 반환합니다."""
     try:
-        subtasks = {
-            'VLAN 관리': [
-                'VLAN 생성',
-                'VLAN 삭제',
-                '인터페이스 VLAN 할당',
-                '트렁크 설정'
-            ],
-            '포트 설정': [
-                '액세스 모드 설정',
-                '트렁크 모드 설정',
-                '포트 속도 설정',
-                '포트 듀플렉스 설정',
-                '인터페이스 활성화'
-            ],
-            '라우팅 설정': [
-                '정적 라우팅 설정',
-                'OSPF 설정',
-                'EIGRP 설정',
-                'BGP 설정'
-            ],
-            '보안 설정': [
-                'Port Security 설정',
-                'SSH/Telnet 접근 제한',
-                'AAA 인증 설정',
-                'ACL 설정'
-            ],
-            'STP 및 LACP': [
-                'STP 모드 설정',
-                'STP 우선순위 설정',
-                'LACP 채널 구성',
-                '포트 채널 설정'
-            ],
-            'QoS 및 트래픽 제어': [
-                'QoS 정책 적용',
-                '트래픽 제한 설정',
-                '서비스 정책 설정'
-            ],
-            '라우팅 상태 모니터링': [
-                '라우팅 테이블 확인',
-                'OSPF 이웃 정보 확인',
-                'BGP 요약 정보 확인'
-            ],
-            '네트워크 상태 점검': [
-                '인터페이스 상태 확인',
-                '트래픽 모니터링'
-            ],
-            '로그 수집': [
-                '시스템 로그 수집',
-                '로그 파일 저장'
-            ],
-            '구성 백업 및 복원': [
-                'Running-config 백업',
-                'Startup-config 백업',
-                '설정 복원',
-                'TFTP 백업 설정'
-            ],
-            'SNMP 및 모니터링': [
-                'SNMP 서버 설정',
-                'SNMP 커뮤니티 설정',
-                'CDP 정보 수집',
-                'LLDP 정보 수집'
-            ],
-            '자동화 스크립트 확장': [
-                '다중 장비 설정 배포',
-                '조건별 설정 변경',
-                '자동화 스크립트 실행'
-            ]
+        logger.info(f"subtasks API 호출(원본): {task_type} (타입: {type(task_type)})")
+        
+        # URL 인코딩 문제 처리
+        if not task_type or task_type.strip() == '':
+            logger.error("작업 유형이 비어 있습니다.")
+            return jsonify({"error": "작업 유형이 지정되지 않았습니다."}), 400
+        
+        # 이전 작업 유형 이름을 새 이름으로 매핑
+        task_type_mapping = {
+            'VLAN 관리': 'VLAN 생성/삭제',
+            '포트 설정': '인터페이스 설정',
+            '인터페이스 구성': '인터페이스 설정',
+            '보안 설정': 'ACL 설정',
+            'STP 및 LACP': 'VLAN 인터페이스 설정',
+            'QoS 및 트래픽 제어': '라우팅 설정',
+            '라우팅 상태 모니터링': '라우팅 설정',
+            '네트워크 상태 점검': 'IP 주소 설정',
+            '로그 수집': 'SNMP 설정',
+            '구성 백업 및 복원': 'NTP 설정',
+            'SNMP 및 모니터링': 'SNMP 설정',
+            '자동화 스크립트 확장': 'NTP 설정'
         }
+
+        # 작업 유형 이름 매핑 적용
+        mapped_task_type = task_type_mapping.get(task_type, task_type)
+        logger.info(f"매핑된 작업 유형: {mapped_task_type}")
         
-        logger.info(f"상세 작업 목록 조회 요청: {task_type}")
+        # 기본 빈 배열로 초기화
+        subtasks = []
         
-        if task_type not in subtasks:
-            logger.warning(f"잘못된 작업 유형: {task_type}")
-            return jsonify({'error': '잘못된 작업 유형입니다'}), 400
+        logger.info(f"작업 유형 매칭 시작: {mapped_task_type}")
+        
+        if mapped_task_type == 'VLAN 생성/삭제' or mapped_task_type == 'VLAN 생성' or mapped_task_type == 'VLAN':
+            logger.info("VLAN 생성/삭제 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': 'VLAN 생성', 'description': 'VLAN을 생성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': 'VLAN 삭제', 'description': 'VLAN을 삭제합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': 'VLAN 이름 설정', 'description': 'VLAN 이름을 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == '인터페이스 설정' or mapped_task_type == '포트':
+            logger.info("인터페이스 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': '인터페이스 설명 추가', 'description': '인터페이스에 설명을 추가합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '인터페이스 활성화', 'description': '인터페이스를 활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '인터페이스 비활성화', 'description': '인터페이스를 비활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '인터페이스 속도 설정', 'description': '인터페이스 속도와 듀플렉스 모드를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == 'VLAN 인터페이스 설정':
+            logger.info("VLAN 인터페이스 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': '액세스 모드 설정', 'description': '인터페이스를 액세스 모드로 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '트렁크 모드 설정', 'description': '인터페이스를 트렁크 모드로 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '액세스 VLAN 할당', 'description': '인터페이스에 액세스 VLAN을 할당합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '허용 VLAN 설정', 'description': '트렁크 포트에 허용할 VLAN을 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == 'IP 주소 설정':
+            logger.info("IP 주소 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': 'IPv4 주소 설정', 'description': '인터페이스에 IPv4 주소를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '보조 IP 주소 설정', 'description': '인터페이스에 보조 IPv4 주소를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '인터페이스 IPv6 주소 설정', 'description': '인터페이스에 IPv6 주소를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == '라우팅 설정':
+            logger.info("라우팅 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': '정적 라우팅 설정', 'description': '정적 라우트를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '기본 라우트 설정', 'description': '기본 라우트를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': 'OSPF 설정', 'description': 'OSPF 라우팅 프로토콜을 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': 'BGP 설정', 'description': 'BGP 라우팅 프로토콜을 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == 'ACL 설정':
+            logger.info("ACL 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': '표준 ACL 설정', 'description': '표준 ACL을 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '확장 ACL 설정', 'description': '확장 ACL을 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '인터페이스 ACL 적용', 'description': '인터페이스에 ACL을 적용합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == 'SNMP 설정':
+            logger.info("SNMP 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': 'SNMP 커뮤니티 설정', 'description': 'SNMP 커뮤니티 문자열을 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': 'SNMP 서버 설정', 'description': 'SNMP 서버 정보를 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': 'SNMP 버전 설정', 'description': 'SNMP 버전을 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        elif mapped_task_type == 'NTP 설정':
+            logger.info("NTP 설정 작업에 대한 상세 작업 반환")
+            subtasks = [
+                {'name': 'NTP 서버 설정', 'description': 'NTP 서버를 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '시간대 설정', 'description': '장비의 시간대를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+            ]
+        else:
+            logger.warning(f"매칭되는 작업 유형을 찾을 수 없음: {mapped_task_type}, 기본 인터페이스 설정 작업 반환")
+            # 기본적으로 인터페이스 설정 작업 반환
+            subtasks = [
+                {'name': '인터페이스 설명 추가', 'description': '인터페이스에 설명을 추가합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
+                {'name': '인터페이스 활성화', 'description': '인터페이스를 활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
+                {'name': '인터페이스 비활성화', 'description': '인터페이스를 비활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'}
+            ]
             
-        return jsonify(subtasks[task_type])
+        logger.info(f"반환할 상세 작업 개수: {len(subtasks)}")
+        response = {"subtasks": subtasks}
+        return jsonify(subtasks)
     except Exception as e:
-        logger.error(f'상세 작업 목록 조회 중 오류 발생: {str(e)}')
-        return jsonify({'error': '상세 작업 목록을 불러오는데 실패했습니다'}), 500
+        logger.error(f"상세 작업 목록 조회 중 오류: {str(e)}")
+        import traceback
+        logger.error(f"상세 오류: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 @bp.route('/api/parameters/<task_type>/<subtask>', methods=['GET'])
 def get_parameters(task_type, subtask):
@@ -732,25 +760,22 @@ def reset_task_types():
         
         # 기본 작업 유형 생성
         default_task_types = [
-            {"name": "VLAN 관리", "description": "VLAN 생성/삭제, 인터페이스 VLAN 할당, 트렁크 설정", "vendor": "all"},
-            {"name": "포트 설정", "description": "액세스/트렁크 모드 설정, 포트 속도/듀플렉스 조정, 인터페이스 활성화", "vendor": "all"},
-            {"name": "라우팅 설정", "description": "정적 라우팅, OSPF, EIGRP, BGP 설정 및 관리", "vendor": "all"},
-            {"name": "보안 설정", "description": "Port Security, SSH/Telnet 제한, AAA 인증, ACL 설정", "vendor": "all"},
-            {"name": "STP 및 LACP", "description": "STP(RSTP/PVST) 설정, LACP/포트 채널 구성", "vendor": "all"},
-            {"name": "QoS 및 트래픽 제어", "description": "QoS 정책 적용, 트래픽 제한, 서비스 정책 설정", "vendor": "all"},
-            {"name": "라우팅 상태 모니터링", "description": "라우팅 테이블, OSPF 이웃, BGP 요약 정보 확인", "vendor": "all"},
-            {"name": "네트워크 상태 점검", "description": "인터페이스 상태 확인, 트래픽 모니터링", "vendor": "all"},
-            {"name": "로그 수집", "description": "로깅 명령 실행 후 파일 저장", "vendor": "all"},
-            {"name": "구성 백업 및 복원", "description": "Running-config/Startup-config 백업 및 복원, TFTP 설정", "vendor": "all"},
-            {"name": "SNMP 및 모니터링", "description": "SNMP 설정, CDP/LLDP 정보 수집", "vendor": "all"},
-            {"name": "자동화 스크립트 확장", "description": "여러 장비에 설정 배포, 특정 조건 검증 후 자동 변경 적용", "vendor": "all"}
+            {"name": "VLAN 생성/삭제", "description": "VLAN 생성/삭제, 인터페이스 VLAN 할당, 트렁크 설정", "vendor": "all", "template_key": "vlan_config"},
+            {"name": "인터페이스 설정", "description": "액세스/트렁크 모드 설정, 포트 속도/듀플렉스 조정, 인터페이스 활성화", "vendor": "all", "template_key": "interface_config"},
+            {"name": "VLAN 인터페이스 설정", "description": "VLAN 인터페이스 구성, STP 설정, LACP/포트 채널 구성", "vendor": "all", "template_key": "vlan_interface"},
+            {"name": "IP 주소 설정", "description": "인터페이스 IP 주소 설정, 서브넷 마스크 구성", "vendor": "all", "template_key": "ip_config"},
+            {"name": "라우팅 설정", "description": "정적 라우팅, OSPF, EIGRP, BGP 설정 및 관리", "vendor": "all", "template_key": "routing_config"},
+            {"name": "ACL 설정", "description": "ACL 구성, 포트 보안, SSH/Telnet 제한", "vendor": "all", "template_key": "acl_config"},
+            {"name": "SNMP 설정", "description": "SNMP 커뮤니티 설정, 트랩 설정", "vendor": "all", "template_key": "snmp_config"},
+            {"name": "NTP 설정", "description": "NTP 서버 설정, 타임존 구성", "vendor": "all", "template_key": "ntp_config"}
         ]
         
         for task_type_data in default_task_types:
             task_type = TaskType(
                 name=task_type_data["name"],
                 description=task_type_data["description"],
-                vendor=task_type_data["vendor"]
+                vendor=task_type_data["vendor"],
+                template_key=task_type_data.get("template_key")
             )
             db.session.add(task_type)
         

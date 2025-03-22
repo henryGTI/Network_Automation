@@ -310,7 +310,7 @@ async function handleTaskTypeChange(e) {
     } else {
         // 작업 유형이 해제되면 해당 상세 작업 제거
         selectedTasks.delete(taskType);
-        updateSubtaskContainer();
+        updateSubtaskContainer(taskType);
     }
     
     updateGenerateScriptButton();
@@ -318,231 +318,378 @@ async function handleTaskTypeChange(e) {
 
 // 상세 작업 목록 로드
 async function loadSubtasks(taskType) {
+    console.log('상세 작업 로드 시작:', taskType);
+    
+    // 문자열 검증
+    const safeTaskType = String(taskType || '');
+    if (!safeTaskType) {
+        console.error('작업 유형이 지정되지 않았습니다');
+        return;
+    }
+    
+    // 작업 유형 매핑 테이블
+    const taskTypeMapping = {
+        'VLAN 관리': 'VLAN 생성/삭제',
+        '포트 설정': '인터페이스 설정',
+        '인터페이스 구성': '인터페이스 설정',
+        'VLAN 설정': 'VLAN 생성/삭제', 
+        '보안': '보안 설정',
+        '라우팅': '라우팅 설정',
+        'SNMP': 'SNMP 설정'
+    };
+    
+    // 작업 유형 매핑
+    let mappedTaskType = safeTaskType;
+    if (taskTypeMapping[safeTaskType]) {
+        console.log(`${safeTaskType}를 ${taskTypeMapping[safeTaskType]}(으)로 매핑합니다.`);
+        mappedTaskType = taskTypeMapping[safeTaskType];
+    }
+    
     try {
-        console.log('상세 작업 로딩 시작:', taskType);
-        
-        if (!taskType) {
-            console.error('작업 유형이 지정되지 않았습니다');
-            showToast('작업 유형을 선택해주세요', 'error');
-            return;
-        }
-        
-        // 인터페이스 구성 -> 포트 설정으로 매핑
-        let mappedTaskType = taskType;
-        console.log('원본 작업 유형:', taskType);
-        
-        if (taskType === '인터페이스 구성') {
-            console.log('인터페이스 구성을 포트 설정으로 매핑합니다.');
-            mappedTaskType = '포트 설정';
-            showToast('인터페이스 구성은 포트 설정으로 변경되었습니다.', 'info');
-        }
-        
-        console.log('매핑된 작업 유형:', mappedTaskType);
-        
-        const timestamp = new Date().getTime();
-        const url = `/config/api/subtasks/${encodeURIComponent(mappedTaskType)}?_=${timestamp}`;
-        console.log('상세 작업 요청 URL:', url);
-        
-        const response = await fetch(url, {
-            cache: 'no-store',
-            headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
-        });
-        
-        console.log('상세 작업 응답 상태:', response.status, response.statusText);
+        console.log(`상세 작업 API 요청: /api/subtasks/${encodeURIComponent(mappedTaskType)}`);
+        const response = await fetch(`/api/subtasks/${encodeURIComponent(mappedTaskType)}`);
         
         if (!response.ok) {
-            // 백업 접근 방법: 오류가 발생하면 다른 경로로 시도
-            console.warn(`${mappedTaskType} 상세 작업 로드 실패, 백업 방법 시도 중...`);
+            console.error(`상세 작업 API 응답 오류: ${response.status} ${response.statusText}`);
             
-            // 포트 설정을 항상 시도
-            if (mappedTaskType !== '포트 설정') {
-                console.log('포트 설정 작업 유형으로 시도합니다.');
-                const backupResponse = await fetch(`/config/api/subtasks/${encodeURIComponent('포트 설정')}?_=${timestamp}`, {
-                    cache: 'no-store'
-                });
+            // 백업 접근 방법: '인터페이스 설정'으로 시도
+            if (mappedTaskType !== '인터페이스 설정') {
+                console.warn(`${mappedTaskType} 상세 작업 로드 실패, '인터페이스 설정'으로 시도...`);
                 
-                console.log('백업 요청 응답 상태:', backupResponse.status, backupResponse.statusText);
-                
+                const backupResponse = await fetch(`/api/subtasks/인터페이스 설정`);
                 if (backupResponse.ok) {
-                    const backupSubtasks = await backupResponse.json();
-                    console.log('백업 방법으로 받은 상세 작업:', backupSubtasks);
+                    const backupData = await backupResponse.json();
+                    console.log('백업 방법으로 받은 상세 작업:', backupData);
                     
-                    // 선택된 작업 유형의 상세 작업 목록 저장
-                    selectedTasks.set(taskType, {
-                        subtasks: backupSubtasks,
-                        selected: new Set()
-                    });
+                    // 이름만 추출하여 저장
+                    if (selectedTasks.has(safeTaskType)) {
+                        const taskData = selectedTasks.get(safeTaskType);
+                        taskData.subtasks = extractSubtaskNames(backupData);
+                    }
                     
-                    updateSubtaskContainer();
-                    showToast(`${taskType}의 상세 작업을 '포트 설정'으로 대체했습니다.`, 'warning');
+                    updateSubtaskContainer(safeTaskType);
+                    showToast(`${safeTaskType}의 상세 작업을 '인터페이스 설정'으로 대체했습니다.`, 'warning');
                     return;
                 }
             }
             
-            // 에러 응답 본문 읽기
-            const errorText = await response.text();
-            console.error('상세 작업 로드 실패 응답 내용:', errorText);
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            // 모든 백업 시도 실패
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const subtasks = await response.json();
-        console.log('받은 상세 작업:', subtasks);
+        const data = await response.json();
+        console.log('받은 상세 작업:', data);
         
-        if (!Array.isArray(subtasks) || subtasks.length === 0) {
-            console.error('상세 작업 데이터가 비어있거나 배열이 아님:', subtasks);
-            showToast(`${taskType}의 상세 작업이 없습니다.`, 'warning');
-            return;
+        // 작업 데이터 저장 (이름만 추출)
+        if (selectedTasks.has(safeTaskType)) {
+            const taskData = selectedTasks.get(safeTaskType);
+            taskData.subtasks = extractSubtaskNames(data);
         }
         
-        // 선택된 작업 유형의 상세 작업 목록 저장
-        selectedTasks.set(taskType, {
-            subtasks: subtasks,
-            selected: new Set()
-        });
-        
-        updateSubtaskContainer();
+        updateSubtaskContainer(safeTaskType);
     } catch (error) {
-        console.error(`${taskType}의 상세 작업 로드 실패:`, error);
-        showToast(`${taskType}의 상세 작업을 불러오는데 실패했습니다. 잠시 후 다시 시도해 주세요.`, 'error');
+        console.error(`${safeTaskType}의 상세 작업 로드 실패:`, error);
+        showToast(`${safeTaskType}의 상세 작업을 불러오는데 실패했습니다.`, 'error');
     }
 }
 
-// 상세 작업 컨테이너 업데이트
-function updateSubtaskContainer() {
-    const container = document.getElementById('subtask-container');
-    if (!container) return;
-
-    let html = '';
-    for (const [taskType, data] of selectedTasks.entries()) {
-        html += `
-            <div class="mb-3">
-                <h6>${taskType}</h6>
-                ${data.subtasks.map(subtask => `
-                    <div class="form-check">
-                        <input class="form-check-input subtask-checkbox" type="checkbox" 
-                               id="subtask-${taskType}-${subtask}" 
-                               data-task-type="${taskType}"
-                               value="${subtask}"
-                               ${data.selected.has(subtask) ? 'checked' : ''}>
-                        <label class="form-check-label" for="subtask-${taskType}-${subtask}">
-                            ${subtask}
-                        </label>
-                    </div>
-                `).join('')}
-            </div>
-        `;
+// 자세한 작업에서 이름만 추출하는 함수
+function extractSubtaskNames(subtasks) {
+    if (!subtasks || !Array.isArray(subtasks)) {
+        console.error('상세 작업 목록이 유효하지 않습니다:', subtasks);
+        return [];
     }
     
-    container.innerHTML = html;
+    return subtasks.map(subtask => {
+        if (typeof subtask === 'string') {
+            return subtask;
+        } else if (typeof subtask === 'object' && subtask !== null) {
+            return subtask.name || String(subtask);
+        } else {
+            return String(subtask);
+        }
+    }).filter(name => name && name !== '[object Object]');
+}
 
-    // 상세 작업 체크박스 이벤트 리스너 등록
-    document.querySelectorAll('.subtask-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', handleSubtaskChange);
+// 상세 작업 목록 컨테이너 업데이트
+function updateSubtaskContainer(taskType) {
+    console.log('상세 작업 컨테이너 업데이트:', taskType);
+    
+    // 문자열 검증
+    const safeTaskType = String(taskType || '');
+    if (!safeTaskType) {
+        console.error('작업 유형이 유효하지 않습니다');
+        return;
+    }
+    
+    // 작업 데이터 확인
+    if (!selectedTasks.has(safeTaskType)) {
+        console.error(`작업 유형 ${safeTaskType}에 대한 데이터가 없습니다`);
+        return;
+    }
+    
+    const taskData = selectedTasks.get(safeTaskType);
+    const { subtasks = [], selected = new Set() } = taskData;
+    
+    // 상세 작업 컨테이너 찾기
+    const container = document.getElementById(`subtasks-${safeTaskType}`);
+    if (!container) {
+        console.error(`작업 유형 ${safeTaskType}의 상세 작업 컨테이너를 찾을 수 없습니다`);
+        return;
+    }
+    
+    // 기존 내용 지우기
+    container.innerHTML = '';
+    
+    // 상세 작업이 없는 경우 메시지 표시
+    if (subtasks.length === 0) {
+        container.innerHTML = '<p class="text-muted">사용 가능한 상세 작업이 없습니다.</p>';
+        return;
+    }
+    
+    // 상세 작업 체크박스 생성
+    subtasks.forEach(subtask => {
+        // 문자열 확인
+        const subtaskName = typeof subtask === 'object' && subtask.name ? 
+            String(subtask.name) : String(subtask);
+        
+        // 체크박스 생성
+        const div = document.createElement('div');
+        div.className = 'form-check mb-2';
+        
+        const input = document.createElement('input');
+        input.className = 'form-check-input subtask-checkbox';
+        input.type = 'checkbox';
+        input.id = `subtask-${safeTaskType}-${subtaskName}`;
+        input.checked = selected.has(subtaskName);
+        input.value = subtaskName;
+        input.dataset.taskType = safeTaskType;
+        input.dataset.subtaskName = subtaskName;
+        input.addEventListener('change', handleSubtaskChange);
+        
+        const label = document.createElement('label');
+        label.className = 'form-check-label';
+        label.htmlFor = input.id;
+        label.textContent = subtaskName;
+        
+        div.appendChild(input);
+        div.appendChild(label);
+        container.appendChild(div);
     });
 }
 
 // 상세 작업 선택 변경 처리
 async function handleSubtaskChange(e) {
-    const taskType = e.target.dataset.taskType;
-    const subtask = e.target.value;
+    // 항상 문자열 데이터만 사용
+    const taskType = String(e.target.dataset.taskType || '');
+    const subtaskName = String(e.target.dataset.subtaskName || e.target.value || '');
     const isChecked = e.target.checked;
     
-    if (!selectedTasks.has(taskType)) return;
+    console.log('상세 작업 선택 변경:', taskType, subtaskName, isChecked);
+    console.log('체크박스 데이터:', {
+        id: e.target.id,
+        value: e.target.value, 
+        dataset: e.target.dataset,
+        type: typeof subtaskName
+    });
+    
+    if (!taskType) {
+        console.error('작업 유형이 누락되었습니다.');
+        return;
+    }
+    
+    if (!subtaskName) {
+        console.error('상세 작업명이 누락되었습니다.');
+        return;
+    }
+    
+    if (subtaskName === '[object Object]') {
+        console.error('잘못된 상세 작업명(객체)이 전달되었습니다.');
+        showToast('상세 작업 이름이 올바르지 않습니다.', 'error');
+        return;
+    }
+    
+    if (!selectedTasks.has(taskType)) {
+        console.error(`작업 유형 ${taskType}에 대한 데이터가 없습니다.`);
+        return;
+    }
     
     const taskData = selectedTasks.get(taskType);
     if (isChecked) {
-        taskData.selected.add(subtask);
-        await loadParameters(taskType, subtask);
+        taskData.selected.add(subtaskName);
+        console.log(`loadParameters 호출: ${taskType}/${subtaskName} (${typeof taskType}/${typeof subtaskName})`);
+        await loadParameters(taskType, subtaskName);
     } else {
-        taskData.selected.delete(subtask);
-        removeParameters(taskType, subtask);
+        taskData.selected.delete(subtaskName);
+        removeParameters(taskType, subtaskName);
     }
     
     updateGenerateScriptButton();
 }
 
 // 파라미터 로드
-async function loadParameters(taskType, subtask) {
-    try {
-        console.log('파라미터 로딩 시작:', taskType, subtask);
-        
-        if (!taskType || !subtask) {
-            console.error('작업 유형 또는 상세 작업이 지정되지 않았습니다');
-            return;
-        }
-        
-        // 인터페이스 구성 -> 포트 설정으로 매핑
-        let mappedTaskType = taskType;
-        if (taskType === '인터페이스 구성') {
-            console.log('인터페이스 구성을 포트 설정으로 매핑합니다.');
-            mappedTaskType = '포트 설정';
-        }
-        
-        const timestamp = new Date().getTime();
-        const response = await fetch(`/config/api/parameters/${encodeURIComponent(mappedTaskType)}/${encodeURIComponent(subtask)}?_=${timestamp}`, {
-            cache: 'no-store',
-            headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
+async function loadParameters(taskType, subtaskName) {
+    console.log(`파라미터 로드: ${taskType}/${subtaskName} (${typeof taskType}/${typeof subtaskName})`);
+    
+    // 문자열 검증
+    const safeTaskType = String(taskType || '');
+    const safeSubtaskName = String(subtaskName || '');
+    
+    if (!safeTaskType || !safeSubtaskName) {
+        console.error('파라미터 로드 실패: 작업 유형 또는 상세 작업명이 유효하지 않습니다', {
+            taskType: safeTaskType,
+            subtaskName: safeSubtaskName
         });
+        return;
+    }
+    
+    try {
+        // API 요청에서 문자열 사용
+        const response = await fetch(`/api/parameters/${safeTaskType}/${safeSubtaskName}`);
         
         if (!response.ok) {
-            // 백업 접근 방법: 오류가 발생하면 다른 경로로 시도
-            console.warn(`${mappedTaskType}/${subtask} 파라미터 로드 실패, 백업 방법 시도 중...`);
-            
-            // 포트 설정으로 시도
-            if (mappedTaskType !== '포트 설정') {
-                console.log('포트 설정/인터페이스 활성화 파라미터로 시도합니다.');
-                const backupResponse = await fetch(`/config/api/parameters/${encodeURIComponent('포트 설정')}/${encodeURIComponent('인터페이스 활성화')}?_=${timestamp}`, {
-                    cache: 'no-store'
-                });
-                
-                if (backupResponse.ok) {
-                    const backupParameters = await backupResponse.json();
-                    console.log('백업 방법으로 받은 파라미터:', backupParameters);
-                    createParameterForm(taskType, subtask, backupParameters);
-                    showToast(`${taskType}/${subtask}의 파라미터를 대체 파라미터로 로드했습니다.`, 'warning');
-                    return;
-                }
-            }
-            
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const parameters = await response.json();
-        console.log('받은 파라미터:', parameters);
-        
-        if (!Array.isArray(parameters) || parameters.length === 0) {
-            console.warn('파라미터 데이터가 비어있거나 배열이 아님:', parameters);
-            showToast(`${taskType}/${subtask}의 파라미터가 없습니다.`, 'warning');
+            const errorData = await response.json().catch(() => ({ message: '서버 응답 오류' }));
+            console.error(`파라미터 로드 실패: ${errorData.message || '서버 오류'}`, response.status);
             return;
         }
         
-        createParameterForm(taskType, subtask, parameters);
+        const data = await response.json();
+        console.log('로드된 파라미터:', data);
+        
+        if (!data || !Array.isArray(data.parameters)) {
+            console.error('파라미터 데이터가 올바르지 않습니다', data);
+            return;
+        }
+        
+        // 파라미터 데이터 저장
+        const taskData = selectedTasks.get(safeTaskType);
+        if (taskData && taskData.parameters) {
+            taskData.parameters[safeSubtaskName] = data.parameters;
+        }
+        
+        // 모든 장치에 파라미터 필드 추가
+        addParameterFieldsToDevices(safeTaskType, safeSubtaskName, data.parameters);
     } catch (error) {
-        console.error('파라미터를 불러오는 중 오류 발생:', error);
-        showToast(`${taskType}/${subtask}의 파라미터를 불러오는데 실패했습니다`, 'error');
+        console.error('파라미터 로드 중 오류 발생:', error);
+        showToast('파라미터 로드 중 오류가 발생했습니다.', 'error');
     }
+}
+
+// 모든 장비에 파라미터 필드 추가
+function addParameterFieldsToDevices(taskType, subtaskName, parameters) {
+    console.log(`파라미터 필드 추가: ${taskType}/${subtaskName}`, parameters);
+    
+    if (!parameters || !Array.isArray(parameters)) {
+        console.error('유효하지 않은 파라미터 데이터:', parameters);
+        return;
+    }
+    
+    const paramContainer = document.getElementById(`parameters-${taskType}-${subtaskName}`);
+    if (!paramContainer) {
+        console.error(`파라미터 컨테이너를 찾을 수 없음: parameters-${taskType}-${subtaskName}`);
+        return;
+    }
+    
+    // 기존 폼 초기화
+    paramContainer.innerHTML = '';
+    
+    // 파라미터가 없으면 안내 메시지 표시
+    if (parameters.length === 0) {
+        paramContainer.innerHTML = '<p class="text-muted">이 작업에 필요한 파라미터가 없습니다.</p>';
+        return;
+    }
+    
+    // 폼 생성
+    parameters.forEach(param => {
+        const formGroup = document.createElement('div');
+        formGroup.className = 'mb-3';
+        
+        const label = document.createElement('label');
+        label.className = 'form-label';
+        label.htmlFor = `param-${taskType}-${subtaskName}-${param.name}`;
+        label.textContent = param.label || param.name;
+        
+        const input = document.createElement('input');
+        input.type = param.type || 'text';
+        input.className = 'form-control parameter-input';
+        input.id = `param-${taskType}-${subtaskName}-${param.name}`;
+        input.name = param.name;
+        input.dataset.taskType = taskType;
+        input.dataset.subtaskName = subtaskName;
+        
+        if (param.required) {
+            input.required = true;
+            label.innerHTML += ' <span class="text-danger">*</span>';
+        }
+        
+        if (param.placeholder) {
+            input.placeholder = param.placeholder;
+        }
+        
+        if (param.min !== undefined) {
+            input.min = param.min;
+        }
+        
+        if (param.max !== undefined) {
+            input.max = param.max;
+        }
+        
+        formGroup.appendChild(label);
+        formGroup.appendChild(input);
+        paramContainer.appendChild(formGroup);
+    });
 }
 
 // 파라미터 폼 생성 함수 분리
 function createParameterForm(taskType, subtask, parameters) {
+    console.log('파라미터 폼 생성 시작:', taskType, subtask);
+    console.log('파라미터 데이터:', JSON.stringify(parameters));
+    
     const container = document.getElementById('parameters-container');
-    if (!container) return;
+    if (!container) {
+        console.error('파라미터 컨테이너 엘리먼트를 찾을 수 없음');
+        return;
+    }
+
+    // 이미 존재하는 섹션 삭제 (중복 방지)
+    const sectionId = `params-${taskType}-${subtask}`.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '');
+    const existingSection = document.getElementById(sectionId);
+    if (existingSection) {
+        console.log('기존 파라미터 섹션 제거:', sectionId);
+        existingSection.remove();
+    }
 
     const paramSection = document.createElement('div');
-    paramSection.id = `params-${taskType}-${subtask}`;
+    paramSection.id = sectionId;
     paramSection.className = 'mb-4 border p-3 rounded bg-light';
     
-    paramSection.innerHTML = `
-        <h6 class="border-bottom pb-2 mb-3">${taskType} - ${subtask}</h6>
-        ${parameters.map(param => {
+    try {
+        let paramHtml = `<h6 class="border-bottom pb-2 mb-3">${taskType} - ${subtask}</h6>`;
+        
+        // 파라미터 배열을 순회하면서 HTML 생성
+        for (const param of parameters) {
+            // 파라미터가 객체인지 확인
+            if (!param || typeof param !== 'object') {
+                console.warn('유효하지 않은 파라미터 항목:', param);
+                continue;
+            }
+            
+            // 필수 필드 확인
+            const paramName = param.name || '';
+            if (!paramName) {
+                console.warn('파라미터 이름이 없는 항목:', param);
+                continue;
+            }
+            
+            // ID 생성 및 특수문자 처리
+            const paramId = `param-${taskType}-${subtask}-${paramName}`
+                .replace(/\s+/g, '-')
+                .replace(/[^a-zA-Z0-9\-_]/g, '');
+            
+            // 파라미터 레이블 결정
+            const label = param.label || paramName;
+            const required = param.required === true;
+            
             // 정규식 패턴 처리
             let patternAttr = '';
             if (param.pattern) {
@@ -560,77 +707,123 @@ function createParameterForm(taskType, subtask, parameters) {
                     patternAttr = '';
                 }
             }
-
-            return `
+            
+            // 파라미터 입력 필드 HTML 생성
+            paramHtml += `
                 <div class="mb-3">
-                    <label for="param-${taskType}-${subtask}-${param.name}" class="form-label">
-                        ${param.label || param.name}${param.required ? ' <span class="text-danger">*</span>' : ''}
-                    </label>
-                    ${param.type === 'select' ? `
-                        <select class="form-select" 
-                                id="param-${taskType}-${subtask}-${param.name}"
-                                name="${param.name}"
-                                ${param.required ? 'required' : ''}>
-                            <option value="">선택하세요</option>
-                            ${Array.isArray(param.options) ? 
-                                param.options.map(opt => {
-                                    const optValue = typeof opt === 'object' ? opt.value : opt;
-                                    const optLabel = typeof opt === 'object' ? opt.label : opt;
-                                    return `<option value="${optValue}">${optLabel}</option>`;
-                                }).join('') 
-                                : ''}
-                        </select>
-                    ` : `
-                        <input type="${param.type || 'text'}"
-                               class="form-control"
-                               id="param-${taskType}-${subtask}-${param.name}"
-                               name="${param.name}"
-                               placeholder="${param.placeholder || ''}"
-                               ${patternAttr}
-                               ${param.required ? 'required' : ''}>
-                    `}
-                    ${param.description ? `
-                        <div class="form-text">
-                            ${param.description}
-                            ${patternAttr ? `<br><small class="text-muted">형식: ${param.pattern}</small>` : ''}
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        }).join('')}
-    `;
+                    <label for="${paramId}" class="form-label">
+                        ${label}${required ? ' <span class="text-danger">*</span>' : ''}
+                    </label>`;
+            
+            // select 필드 또는 input 필드 생성
+            if (param.type === 'select' && Array.isArray(param.options)) {
+                paramHtml += `
+                    <select class="form-select" 
+                            id="${paramId}"
+                            name="${paramName}"
+                            data-param-name="${paramName}"
+                            ${required ? 'required' : ''}>
+                        <option value="">선택하세요</option>
+                        ${param.options.map(opt => {
+                            const optValue = typeof opt === 'object' ? (opt.value || '') : opt;
+                            const optLabel = typeof opt === 'object' ? (opt.label || optValue) : opt;
+                            return `<option value="${optValue}">${optLabel}</option>`;
+                        }).join('')}
+                    </select>`;
+            } else {
+                // 기본적으로 text 입력 필드
+                const inputType = param.type || 'text';
+                paramHtml += `
+                    <input type="${inputType}"
+                           class="form-control"
+                           id="${paramId}"
+                           name="${paramName}"
+                           data-param-name="${paramName}"
+                           placeholder="${param.placeholder || ''}"
+                           ${patternAttr}
+                           ${required ? 'required' : ''}>`;
+            }
+            
+            // 설명 추가
+            if (param.description) {
+                paramHtml += `
+                    <div class="form-text">
+                        ${param.description}
+                        ${patternAttr ? `<br><small class="text-muted">형식: ${param.pattern}</small>` : ''}
+                    </div>`;
+            }
+            
+            paramHtml += `</div>`;
+        }
+        
+        // 생성된 HTML을 섹션에 설정
+        paramSection.innerHTML = paramHtml;
+    } catch (error) {
+        console.error('파라미터 폼 HTML 생성 오류:', error);
+        paramSection.innerHTML = `
+            <div class="alert alert-danger">
+                <strong>오류:</strong> 파라미터 폼을 생성하는 중 오류가 발생했습니다.
+                <br>${error.message}
+            </div>`;
+    }
     
+    // 섹션을 컨테이너에 추가
     container.appendChild(paramSection);
+    console.log('파라미터 폼 생성 완료:', sectionId);
     
     // 입력값 유효성 검사 이벤트 리스너 추가
-    const inputs = paramSection.querySelectorAll('input[pattern]');
-    inputs.forEach(input => {
-        input.addEventListener('input', (e) => {
-            const pattern = new RegExp(input.pattern);
-            if (input.value && !pattern.test(input.value)) {
-                input.classList.add('is-invalid');
-                if (!input.nextElementSibling?.classList.contains('invalid-feedback')) {
-                    const feedback = document.createElement('div');
-                    feedback.className = 'invalid-feedback';
-                    feedback.textContent = `올바른 형식으로 입력해주세요. (${input.pattern})`;
-                    input.parentNode.insertBefore(feedback, input.nextSibling);
+    try {
+        const inputs = paramSection.querySelectorAll('input[pattern]');
+        inputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const pattern = new RegExp(input.pattern);
+                if (input.value && !pattern.test(input.value)) {
+                    input.classList.add('is-invalid');
+                    if (!input.nextElementSibling?.classList.contains('invalid-feedback')) {
+                        const feedback = document.createElement('div');
+                        feedback.className = 'invalid-feedback';
+                        feedback.textContent = `올바른 형식으로 입력해주세요. (${input.pattern})`;
+                        input.parentNode.insertBefore(feedback, input.nextSibling);
+                    }
+                } else {
+                    input.classList.remove('is-invalid');
+                    const feedback = input.nextElementSibling;
+                    if (feedback?.classList.contains('invalid-feedback')) {
+                        feedback.remove();
+                    }
                 }
-            } else {
-                input.classList.remove('is-invalid');
-                const feedback = input.nextElementSibling;
-                if (feedback?.classList.contains('invalid-feedback')) {
-                    feedback.remove();
-                }
-            }
+            });
         });
-    });
+    } catch (error) {
+        console.error('이벤트 리스너 등록 중 오류:', error);
+    }
 }
 
-// 파라미터 섹션 제거
-function removeParameters(taskType, subtask) {
-    const paramSection = document.getElementById(`params-${taskType}-${subtask}`);
-    if (paramSection) {
-        paramSection.remove();
+// 파라미터 제거
+function removeParameters(taskType, subtaskName) {
+    console.log(`파라미터 제거: ${taskType}/${subtaskName}`);
+    
+    // 문자열 검증
+    const safeTaskType = String(taskType || '');
+    const safeSubtaskName = String(subtaskName || '');
+    
+    if (!safeTaskType || !safeSubtaskName) {
+        console.error('작업 유형 또는 상세 작업명이 유효하지 않습니다');
+        return;
+    }
+    
+    // 작업 데이터에서 제거
+    if (selectedTasks.has(safeTaskType)) {
+        const taskData = selectedTasks.get(safeTaskType);
+        if (taskData.parameters) {
+            delete taskData.parameters[safeSubtaskName];
+        }
+    }
+    
+    // DOM에서 파라미터 컨테이너 초기화
+    const paramContainer = document.getElementById(`parameters-${safeTaskType}-${safeSubtaskName}`);
+    if (paramContainer) {
+        paramContainer.innerHTML = '';
     }
 }
 
