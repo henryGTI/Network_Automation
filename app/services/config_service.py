@@ -120,7 +120,7 @@ class ConfigService:
             templates = {
                 'cisco': {
                     'vlan_config': {
-                        'name': 'VLAN 생성/삭제',
+                        'name': 'VLAN 관리',
                         'template': [
                             'configure terminal',
                             'vlan {vlan_id}',
@@ -225,6 +225,18 @@ class ConfigService:
                 }
             }
             
+            # 작업 유형과 템플릿 키 간의 매핑
+            task_type_to_template = {
+                'VLAN 관리': 'vlan_config',
+                '포트 설정': 'interface_config',
+                'VLAN 인터페이스 설정': 'vlan_interface',
+                'IP 주소 설정': 'ip_config',
+                '라우팅 설정': 'routing_config',
+                'ACL 설정': 'acl_config',
+                'SNMP 설정': 'snmp_config',
+                'NTP 설정': 'ntp_config'
+            }
+            
             # 지원하는 벤더인지 확인
             if vendor.lower() not in templates:
                 raise ValueError(f"지원하지 않는 벤더입니다: {vendor}")
@@ -243,26 +255,25 @@ class ConfigService:
                 subtask = subtask_type.get(task_type)
                 task_params = parameters.get(task_type, {})
                 
-                # 작업 유형과 상세 작업에 맞는 템플릿 찾기
-                template_found = False
-                for template_key, template_data in vendor_templates.items():
-                    if template_data['name'] == task_type or template_key == task_type:
-                        template_found = True
-                        script_lines.append(f"! {task_type} - {subtask}")
-                        
-                        # 템플릿에 파라미터 적용
-                        for cmd_template in template_data['template']:
-                            try:
-                                cmd = cmd_template.format(**task_params)
-                                script_lines.append(cmd)
-                            except KeyError as e:
-                                # 필수 파라미터가 없는 경우 경고
-                                logger.warning(f"필수 파라미터 누락: {e}")
-                                script_lines.append(f"! 주의: {e} 파라미터가 필요합니다")
-                        
-                        script_lines.append("!")
+                # 작업 유형에 해당하는 템플릿 키 찾기
+                template_key = task_type_to_template.get(task_type)
                 
-                if not template_found:
+                if template_key and template_key in vendor_templates:
+                    template_data = vendor_templates[template_key]
+                    script_lines.append(f"! {task_type} - {subtask}")
+                    
+                    # 템플릿에 파라미터 적용
+                    for cmd_template in template_data['template']:
+                        try:
+                            cmd = cmd_template.format(**task_params)
+                            script_lines.append(cmd)
+                        except KeyError as e:
+                            # 필수 파라미터가 없는 경우 경고
+                            logger.warning(f"필수 파라미터 누락: {e}")
+                            script_lines.append(f"! 주의: {e} 파라미터가 필요합니다")
+                    
+                    script_lines.append("!")
+                else:
                     script_lines.append(f"! {task_type} - {subtask}")
                     script_lines.append(f"! 주의: '{task_type}'에 대한 템플릿이 없습니다")
                     script_lines.append("!")
