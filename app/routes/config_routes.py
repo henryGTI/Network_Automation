@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app
 from ..services.config_service import ConfigService
+from app.utils.logger import setup_logger
 
 bp = Blueprint('config', __name__)
 config_service = ConfigService()
+logger = setup_logger(__name__)
 
 @bp.route('/api/config/task-types', methods=['GET'])
 def get_task_types():
@@ -46,272 +48,98 @@ def get_subtasks(task_type):
                 '인터페이스 활성화'
             ],
             '라우팅 설정': [
-                '정적 라우팅 설정',
+                '정적 라우팅',
                 'OSPF 설정',
                 'EIGRP 설정',
                 'BGP 설정'
             ],
             '보안 설정': [
-                'Port Security 설정',
-                'SSH 접근 제한',
-                'Telnet 접근 제한',
-                'AAA 인증 설정',
+                'Port Security',
+                'SSH/Telnet 제한',
+                'AAA 인증',
                 'ACL 설정'
             ],
             'STP 및 LACP': [
-                'STP 모드 설정',
-                'RSTP 설정',
-                'PVST 설정',
-                'LACP 설정',
-                '포트 채널 구성'
+                'STP 설정',
+                'LACP/포트 채널 구성'
             ],
             'QoS 및 트래픽 제어': [
-                'QoS 정책 설정',
-                '트래픽 제한 설정',
+                'QoS 정책 적용',
+                '트래픽 제한',
                 '서비스 정책 설정'
             ],
             '라우팅 상태 모니터링': [
-                '라우팅 테이블 조회',
-                'OSPF 네이버 조회',
-                'BGP 요약 정보 조회'
+                '라우팅 테이블 확인',
+                'OSPF 이웃 확인',
+                'BGP 상태 확인'
             ],
             '네트워크 상태 점검': [
                 '인터페이스 상태 확인',
                 '트래픽 모니터링'
             ],
             '로그 수집': [
-                '시스템 로그 조회',
+                '시스템 로그 수집',
                 '로그 파일 저장'
             ],
             '구성 백업 및 복원': [
-                'Running-config 백업',
-                'Startup-config 백업',
-                'TFTP 설정 복원'
+                '설정 백업',
+                '설정 복원'
             ],
             'SNMP 및 모니터링': [
-                'SNMP 서버 설정',
-                'CDP 정보 수집',
-                'LLDP 정보 수집'
+                'SNMP 설정',
+                'CDP/LLDP 정보 수집'
             ],
             '자동화 스크립트 확장': [
-                '다중 장비 설정 배포',
-                '조건부 설정 변경'
+                '다중 장비 설정',
+                '조건 검증'
             ]
         }
-        return jsonify(subtasks.get(task_type, []))
+        
+        if task_type not in subtasks:
+            return jsonify({'error': '잘못된 작업 유형입니다'}), 400
+            
+        return jsonify(subtasks[task_type])
     except Exception as e:
-        current_app.logger.error(f'상세 작업 조회 중 오류 발생: {str(e)}')
-        return jsonify({'error': '상세 작업을 불러오는데 실패했습니다'}), 500
+        current_app.logger.error(f'상세 작업 목록 조회 중 오류 발생: {str(e)}')
+        return jsonify({'error': '상세 작업 목록을 불러오는데 실패했습니다'}), 500
 
 @bp.route('/api/config/parameters/<task_type>/<subtask>', methods=['GET'])
 def get_parameters(task_type, subtask):
-    """특정 상세 작업에 필요한 파라미터 목록을 반환합니다."""
+    """특정 작업에 필요한 파라미터 목록을 반환합니다."""
     try:
         parameters = {
             'VLAN 관리': {
                 'VLAN 생성': [
-                    {
-                        'name': 'vlan_id',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[1-9][0-9]{0,3}$',
-                        'placeholder': '1-4094',
-                        'description': 'VLAN ID를 입력하세요 (1-4094)'
-                    },
-                    {
-                        'name': 'vlan_name',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^[a-zA-Z0-9_-]{1,32}$',
-                        'placeholder': 'ex) vlan10',
-                        'description': 'VLAN의 이름을 입력하세요'
-                    }
+                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094},
+                    {'name': 'vlan_name', 'type': 'text', 'label': 'VLAN 이름', 'required': True}
                 ],
                 '인터페이스 VLAN 할당': [
-                    {
-                        'name': 'interface',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^[a-zA-Z]+[0-9](/[0-9]+)?$',
-                        'placeholder': 'ex) gi0/1',
-                        'description': '설정할 인터페이스 이름을 입력하세요'
-                    },
-                    {
-                        'name': 'vlan_id',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[1-9][0-9]{0,3}$',
-                        'placeholder': '1-4094',
-                        'description': '할당할 VLAN ID를 입력하세요'
-                    }
+                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094}
                 ]
             },
             '포트 설정': {
                 '액세스 모드 설정': [
-                    {
-                        'name': 'interface',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^[a-zA-Z]+[0-9](/[0-9]+)?$',
-                        'placeholder': 'ex) gi0/1',
-                        'description': '설정할 인터페이스 이름을 입력하세요'
-                    },
-                    {
-                        'name': 'vlan_id',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[1-9][0-9]{0,3}$',
-                        'placeholder': '1-4094',
-                        'description': '액세스 VLAN ID를 입력하세요'
-                    }
-                ],
-                '포트 속도 설정': [
-                    {
-                        'name': 'interface',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^[a-zA-Z]+[0-9](/[0-9]+)?$',
-                        'placeholder': 'ex) gi0/1',
-                        'description': '설정할 인터페이스 이름을 입력하세요'
-                    },
-                    {
-                        'name': 'speed',
-                        'type': 'select',
-                        'required': True,
-                        'options': ['auto', '10', '100', '1000'],
-                        'description': '포트의 속도를 선택하세요 (Mbps)'
-                    }
+                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094}
                 ]
             },
             '라우팅 설정': {
-                '정적 라우팅 설정': [
-                    {
-                        'name': 'network',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 192.168.1.0',
-                        'description': '대상 네트워크 주소를 입력하세요'
-                    },
-                    {
-                        'name': 'mask',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 255.255.255.0',
-                        'description': '서브넷 마스크를 입력하세요'
-                    },
-                    {
-                        'name': 'next_hop',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 192.168.1.1',
-                        'description': '다음 홉 주소를 입력하세요'
-                    }
-                ],
-                'OSPF 설정': [
-                    {
-                        'name': 'process_id',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[1-9][0-9]{0,3}$',
-                        'placeholder': '1-65535',
-                        'description': 'OSPF 프로세스 ID를 입력하세요'
-                    },
-                    {
-                        'name': 'network',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 192.168.1.0',
-                        'description': '네트워크 주소를 입력하세요'
-                    },
-                    {
-                        'name': 'wildcard',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 0.0.0.255',
-                        'description': '와일드카드 마스크를 입력하세요'
-                    },
-                    {
-                        'name': 'area',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[0-9]+$',
-                        'placeholder': 'ex) 0',
-                        'description': 'OSPF 영역 번호를 입력하세요'
-                    }
-                ]
-            },
-            '보안 설정': {
-                'Port Security 설정': [
-                    {
-                        'name': 'interface',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^[a-zA-Z]+[0-9](/[0-9]+)?$',
-                        'placeholder': 'ex) gi0/1',
-                        'description': '설정할 인터페이스 이름을 입력하세요'
-                    },
-                    {
-                        'name': 'max_mac',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[1-9][0-9]{0,3}$',
-                        'placeholder': '1-8192',
-                        'description': '최대 허용 MAC 주소 수를 입력하세요'
-                    },
-                    {
-                        'name': 'violation',
-                        'type': 'select',
-                        'required': True,
-                        'options': ['protect', 'restrict', 'shutdown'],
-                        'description': '위반 시 동작을 선택하세요'
-                    }
-                ],
-                'ACL 설정': [
-                    {
-                        'name': 'acl_number',
-                        'type': 'number',
-                        'required': True,
-                        'pattern': '^[1-9][0-9]{0,2}$',
-                        'placeholder': '1-199',
-                        'description': 'ACL 번호를 입력하세요'
-                    },
-                    {
-                        'name': 'action',
-                        'type': 'select',
-                        'required': True,
-                        'options': ['permit', 'deny'],
-                        'description': '허용/거부 동작을 선택하세요'
-                    },
-                    {
-                        'name': 'source',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 192.168.1.0',
-                        'description': '출발지 주소를 입력하세요'
-                    },
-                    {
-                        'name': 'wildcard',
-                        'type': 'text',
-                        'required': True,
-                        'pattern': '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$',
-                        'placeholder': 'ex) 0.0.0.255',
-                        'description': '와일드카드 마스크를 입력하세요'
-                    }
+                '정적 라우팅': [
+                    {'name': 'network_address', 'type': 'text', 'label': '네트워크 주소', 'required': True, 'placeholder': '예: 192.168.1.0'},
+                    {'name': 'subnet_mask', 'type': 'text', 'label': '서브넷 마스크', 'required': True, 'placeholder': '예: 255.255.255.0'},
+                    {'name': 'next_hop', 'type': 'text', 'label': '다음 홉 주소', 'required': True, 'placeholder': '예: 192.168.1.1'}
                 ]
             }
         }
         
-        task_params = parameters.get(task_type, {}).get(subtask, [])
-        return jsonify(task_params)
+        if task_type not in parameters or subtask not in parameters[task_type]:
+            return jsonify({'error': '잘못된 작업 유형 또는 상세 작업입니다'}), 400
+            
+        return jsonify(parameters[task_type][subtask])
     except Exception as e:
-        current_app.logger.error(f'파라미터 조회 중 오류 발생: {str(e)}')
-        return jsonify({'error': '파라미터를 불러오는데 실패했습니다'}), 500
+        current_app.logger.error(f'파라미터 목록 조회 중 오류 발생: {str(e)}')
+        return jsonify({'error': '파라미터 목록을 불러오는데 실패했습니다'}), 500
 
 @bp.route('/api/config/tasks', methods=['GET'])
 def get_tasks():
@@ -428,7 +256,7 @@ def generate_script():
         data = request.get_json()
         
         # 필수 필드 검증
-        required_fields = ['device_id', 'task_types']
+        required_fields = ['device_id', 'task_types', 'subtask_type', 'vendor', 'parameters']
         for field in required_fields:
             if field not in data:
                 return jsonify({
@@ -440,7 +268,9 @@ def generate_script():
         script = config_service.generate_script(
             device_id=data['device_id'],
             task_types=data['task_types'],
-            parameters=data.get('parameters', {})
+            subtask_type=data['subtask_type'],
+            vendor=data['vendor'],
+            parameters=data['parameters']
         )
         
         return jsonify({
