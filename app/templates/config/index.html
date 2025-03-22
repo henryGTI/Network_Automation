@@ -13,40 +13,76 @@
                             <option value="">장비를 선택하세요</option>
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">작업 유형 (다중 선택 가능)</label>
-                        <div id="taskTypeContainer" class="border p-3 rounded">
-                            <!-- 작업 유형 체크박스들이 여기에 동적으로 추가됩니다 -->
+                    
+                    <!-- 작업 유형 섹션 -->
+                    <div class="card mb-4" id="taskTypeSection">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">작업 유형 (다중 선택 가능)</h5>
+                                <button type="button" class="btn btn-sm btn-warning" id="resetTaskTypesBtn">작업 유형 테이블 초기화</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row" id="taskTypeContainer">
+                                <!-- 작업 유형 체크박스가 여기에 로드됩니다 -->
+                            </div>
                         </div>
                     </div>
+                    
                     <div id="taskFormsContainer">
                         <!-- 선택된 작업 유형별 상세 작업 폼이 여기에 추가됩니다 -->
                     </div>
+                    
                     <div class="mb-3">
-                        <button type="button" class="btn btn-primary" onclick="generateScript()">스크립트 생성</button>
-                        <button type="button" class="btn btn-secondary" onclick="previewScript()">미리보기</button>
+                        <button type="button" id="generateScriptBtn" class="btn btn-primary" onclick="generateScript()">스크립트 생성</button>
                     </div>
                 </form>
+            </div>
+        </div>
+        
+        <!-- 스크립트 출력 영역 -->
+        <div id="scriptOutputContainer" class="card mt-4 d-none">
+            <div class="card-header">
+                <h5>생성된 스크립트</h5>
+            </div>
+            <div class="card-body">
+                <textarea id="scriptOutput" class="form-control" rows="15" readonly></textarea>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-success" onclick="copyScript()">복사</button>
+                    <button type="button" class="btn btn-secondary" onclick="executeScript()">실행</button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 스크립트 미리보기 모달 -->
-<div class="modal fade" id="previewModal" tabindex="-1">
+<!-- 스크립트 실행 결과 모달 -->
+<div class="modal fade" id="resultModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">스크립트 미리보기</h5>
+                <h5 class="modal-title">실행 결과</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <pre id="scriptPreview" class="bg-light p-3"></pre>
+                <pre id="scriptResult" class="bg-light p-3"></pre>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
-                <button type="button" class="btn btn-primary" onclick="executeScript()">실행</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- 토스트 메시지 -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 5">
+    <div id="toast" class="toast hide" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong id="toast-title" class="me-auto">알림</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">
+            <span id="toast-message"></span>
         </div>
     </div>
 </div>
@@ -89,22 +125,46 @@ function loadDevices() {
 
 // 작업 유형 목록 로드
 function loadTaskTypes() {
-    fetch('/config/api/config/task-types')
+    fetch('/config/api/task-types')
         .then(response => response.json())
         .then(data => {
+            // 콘솔에 로그 추가
+            console.log('받은 작업 유형 데이터:', data);
+            
             const taskTypeContainer = document.getElementById('taskTypeContainer');
             taskTypeContainer.innerHTML = '';
-            data.forEach(taskType => {
-                const div = document.createElement('div');
-                div.className = 'form-check';
-                div.innerHTML = `
-                    <input class="form-check-input" type="checkbox" value="${taskType}" id="taskType_${taskType.replace(/\s+/g, '_')}">
-                    <label class="form-check-label" for="taskType_${taskType.replace(/\s+/g, '_')}">
-                        ${taskType}
-                    </label>
-                `;
-                taskTypeContainer.appendChild(div);
-            });
+            
+            if (Array.isArray(data)) {
+                data.forEach(taskType => {
+                    // TaskType 객체 처리
+                    const taskTypeName = typeof taskType === 'object' ? taskType.name : taskType;
+                    const taskTypeId = typeof taskType === 'object' ? taskType.id : taskType.replace(/\s+/g, '_');
+                    
+                    const div = document.createElement('div');
+                    div.className = 'form-check';
+                    div.innerHTML = `
+                        <input class="form-check-input" type="checkbox" 
+                               value="${taskTypeName}" 
+                               id="taskType_${taskTypeName.replace(/\s+/g, '_')}"
+                               data-id="${taskTypeId}">
+                        <label class="form-check-label" for="taskType_${taskTypeName.replace(/\s+/g, '_')}">
+                            ${taskTypeName}
+                        </label>
+                    `;
+                    taskTypeContainer.appendChild(div);
+                });
+                
+                // 작업 유형이 있으면 폼을 표시
+                if (data.length > 0) {
+                    document.getElementById('taskTypeSection').classList.remove('d-none');
+                } else {
+                    document.getElementById('taskTypeSection').classList.add('d-none');
+                    showToast('등록된 작업 유형이 없습니다.', 'warning');
+                }
+            } else {
+                showToast('작업 유형 데이터 형식이 올바르지 않습니다.', 'error');
+                console.error('잘못된 작업 유형 데이터 형식:', data);
+            }
         })
         .catch(error => {
             console.error('작업 유형 목록 로드 실패:', error);
@@ -115,48 +175,71 @@ function loadTaskTypes() {
 // 작업 유형 선택 시 상세 작업 폼 업데이트
 function updateTaskForms() {
     const taskFormsContainer = document.getElementById('taskFormsContainer');
-    const selectedTaskTypes = Array.from(document.querySelectorAll('#taskTypeContainer input[type="checkbox"]:checked')).map(cb => cb.value);
+    const selectedTaskTypes = Array.from(document.querySelectorAll('#taskTypeContainer input[type="checkbox"]:checked')).map(cb => ({ 
+        name: cb.value,
+        id: cb.dataset.id 
+    }));
+    
+    // 선택된 작업 유형 없으면 스크립트 생성 버튼 비활성화
+    document.getElementById('generateScriptBtn').disabled = selectedTaskTypes.length === 0;
     
     // 선택된 작업 유형에 대한 폼만 유지
     const existingForms = Array.from(document.querySelectorAll('.task-form'));
     existingForms.forEach(form => {
-        if (!selectedTaskTypes.includes(form.dataset.taskType)) {
+        const formTaskType = form.dataset.taskType;
+        if (!selectedTaskTypes.some(tt => tt.name === formTaskType)) {
             form.remove();
         }
     });
     
     // 새로 선택된 작업 유형에 대한 폼 추가
     selectedTaskTypes.forEach(taskType => {
-        if (!document.querySelector(`.task-form[data-task-type="${taskType}"]`)) {
-            const formDiv = document.createElement('div');
-            formDiv.className = 'task-form card mb-3';
-            formDiv.dataset.taskType = taskType;
-            
-            formDiv.innerHTML = `
-                <div class="card-header">
-                    <h5 class="mb-0">${taskType}</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="subtask_${taskType}" class="form-label">상세 작업</label>
-                        <select class="form-select subtask-select" id="subtask_${taskType}" required data-task-type="${taskType}">
-                            <option value="">상세 작업을 선택하세요</option>
-                            ${taskTypes[taskType].map(subtask => `<option value="${subtask}">${subtask}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="config-details" id="config_${taskType}">
-                        <!-- 상세 작업 선택 시 여기에 설정 폼이 추가됩니다 -->
-                    </div>
-                </div>
-            `;
-            
-            taskFormsContainer.appendChild(formDiv);
-            
-            // 상세 작업 선택 이벤트 리스너 추가
-            const subtaskSelect = formDiv.querySelector('.subtask-select');
-            subtaskSelect.addEventListener('change', function() {
-                loadConfigParameters(taskType, this.value);
-            });
+        const taskTypeName = taskType.name;
+        
+        if (!document.querySelector(`.task-form[data-task-type="${taskTypeName}"]`)) {
+            // 해당 작업 유형의 상세 작업 목록 로드
+            fetch(`/config/api/subtasks/${encodeURIComponent(taskTypeName)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(subtasks => {
+                    const formDiv = document.createElement('div');
+                    formDiv.className = 'task-form card mb-3';
+                    formDiv.dataset.taskType = taskTypeName;
+                    
+                    formDiv.innerHTML = `
+                        <div class="card-header">
+                            <h5 class="mb-0">${taskTypeName}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="subtask_${taskTypeName.replace(/\s+/g, '_')}" class="form-label">상세 작업</label>
+                                <select class="form-select subtask-select" id="subtask_${taskTypeName.replace(/\s+/g, '_')}" required data-task-type="${taskTypeName}">
+                                    <option value="">상세 작업을 선택하세요</option>
+                                    ${subtasks.map(subtask => `<option value="${subtask}">${subtask}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="config-details" id="config_${taskTypeName.replace(/\s+/g, '_')}">
+                                <!-- 상세 작업 선택 시 여기에 설정 폼이 추가됩니다 -->
+                            </div>
+                        </div>
+                    `;
+                    
+                    taskFormsContainer.appendChild(formDiv);
+                    
+                    // 상세 작업 선택 이벤트 리스너 추가
+                    const subtaskSelect = formDiv.querySelector('.subtask-select');
+                    subtaskSelect.addEventListener('change', function() {
+                        loadConfigParameters(taskTypeName, this.value);
+                    });
+                })
+                .catch(error => {
+                    console.error(`${taskTypeName}의 상세 작업 로드 실패:`, error);
+                    showToast(`${taskTypeName}의 상세 작업을 불러오는데 실패했습니다.`, 'error');
+                });
         }
     });
 }
@@ -165,94 +248,158 @@ function updateTaskForms() {
 function loadConfigParameters(taskType, subtask) {
     if (!taskType || !subtask) return;
     
-    fetch(`/config/api/config/parameters/${encodeURIComponent(taskType)}/${encodeURIComponent(subtask)}`)
-        .then(response => response.json())
+    const configContainerId = `config_${taskType.replace(/\s+/g, '_')}`;
+    const configContainer = document.getElementById(configContainerId);
+    if (!configContainer) {
+        console.error(`설정 컨테이너를 찾을 수 없음: ${configContainerId}`);
+        return;
+    }
+    
+    fetch(`/config/api/parameters/${encodeURIComponent(taskType)}/${encodeURIComponent(subtask)}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(parameters => {
-            const configContainer = document.getElementById(`config_${taskType}`);
-            if (!configContainer) return;
-            
             let formHtml = '<div class="row">';
             parameters.forEach(param => {
                 formHtml += `
                     <div class="col-md-6 mb-3">
-                        <label for="${param.name}_${taskType}" class="form-label">${param.label}</label>
+                        <label for="${param.name}_${taskType.replace(/\s+/g, '_')}" class="form-label">${param.label}</label>
                         <input type="${param.type}" 
                                class="form-control" 
-                               id="${param.name}_${taskType}"
-                               name="${param.name}"
+                               id="${param.name}_${taskType.replace(/\s+/g, '_')}" 
+                               name="${param.name}" 
                                ${param.required ? 'required' : ''}
                                ${param.min !== undefined ? `min="${param.min}"` : ''}
                                ${param.max !== undefined ? `max="${param.max}"` : ''}
-                               ${param.placeholder ? `placeholder="${param.placeholder}"` : ''}>
+                               ${param.placeholder ? `placeholder="${param.placeholder}"` : ''}
+                        >
                     </div>
                 `;
             });
             formHtml += '</div>';
-            
             configContainer.innerHTML = formHtml;
         })
         .catch(error => {
-            console.error('파라미터 로드 실패:', error);
-            showToast('설정 파라미터를 불러오는데 실패했습니다.', 'error');
+            console.error(`${taskType}의 파라미터 로드 실패:`, error);
+            showToast(`${taskType}의 파라미터 로드에 실패했습니다.`, 'error');
         });
 }
 
-// 스크립트 생성
+// 스크립트 생성 호출
 function generateScript() {
     const deviceSelect = document.getElementById('deviceSelect');
-    const selectedTaskTypes = Array.from(document.querySelectorAll('#taskTypeContainer input[type="checkbox"]:checked')).map(cb => cb.value);
+    const deviceId = deviceSelect.value;
+    const selectedVendor = deviceSelect.options[deviceSelect.selectedIndex]?.dataset.vendor;
     
-    if (!deviceSelect.value || selectedTaskTypes.length === 0) {
-        showToast('장비와 작업 유형을 선택해주세요.', 'error');
+    if (!deviceId) {
+        showToast('장비를 선택해주세요.', 'error');
         return;
     }
     
-    const selectedOption = deviceSelect.options[deviceSelect.selectedIndex];
-    const vendor = selectedOption.dataset.vendor;
+    if (!selectedVendor) {
+        showToast('선택한 장비의 벤더 정보가 없습니다.', 'error');
+        return;
+    }
     
-    // 각 작업 유형별 데이터 수집
-    const taskData = [];
+    const selectedTaskTypes = Array.from(document.querySelectorAll('#taskTypeContainer input[type="checkbox"]:checked')).map(cb => cb.value);
+    
+    if (selectedTaskTypes.length === 0) {
+        showToast('하나 이상의 작업 유형을 선택해주세요.', 'error');
+        return;
+    }
+    
+    // 각 작업 유형의 상세 작업과 파라미터 수집
+    const tasks = {};
+    let isValid = true;
+    
     selectedTaskTypes.forEach(taskType => {
-        const subtaskSelect = document.getElementById(`subtask_${taskType}`);
-        if (!subtaskSelect || !subtaskSelect.value) {
-            showToast(`${taskType}의 상세 작업을 선택해주세요.`, 'error');
+        const selectId = `subtask_${taskType.replace(/\s+/g, '_')}`;
+        const subtaskSelect = document.getElementById(selectId);
+        
+        if (!subtaskSelect) {
+            console.error(`상세 작업 선택기를 찾을 수 없음: ${selectId}`);
+            isValid = false;
             return;
         }
         
-        const configContainer = document.getElementById(`config_${taskType}`);
+        const subtask = subtaskSelect.value;
+        
+        if (!subtask) {
+            showToast(`${taskType}의 상세 작업을 선택해주세요.`, 'error');
+            isValid = false;
+            return;
+        }
+        
+        const configId = `config_${taskType.replace(/\s+/g, '_')}`;
+        const parametersDiv = document.getElementById(configId);
+        
+        if (!parametersDiv) {
+            console.error(`파라미터 컨테이너를 찾을 수 없음: ${configId}`);
+            isValid = false;
+            return;
+        }
+        
+        const parameterInputs = parametersDiv.querySelectorAll('input');
         const parameters = {};
-        const inputs = configContainer.querySelectorAll('input');
-        inputs.forEach(input => {
+        
+        parameterInputs.forEach(input => {
+            if (input.required && !input.value) {
+                showToast(`${taskType}의 ${input.name} 파라미터를 입력해주세요.`, 'error');
+                isValid = false;
+                return;
+            }
             parameters[input.name] = input.value;
         });
         
-        taskData.push({
-            task_type: taskType,
-            subtask_type: subtaskSelect.value,
-            parameters: parameters
-        });
+        tasks[taskType] = {
+            subtask,
+            parameters
+        };
     });
     
-    const formData = {
-        device_id: deviceSelect.value,
-        vendor: vendor,
-        tasks: taskData
+    if (!isValid) return;
+    
+    // API 호출 데이터 준비
+    const requestData = {
+        device_id: deviceId,
+        task_types: selectedTaskTypes,
+        subtask_type: Object.fromEntries(selectedTaskTypes.map(tt => [tt, tasks[tt].subtask])),
+        vendor: selectedVendor,
+        parameters: Object.fromEntries(selectedTaskTypes.map(tt => [tt, tasks[tt].parameters]))
     };
     
-    fetch('/config/api/config/generate-script', {
+    console.log('스크립트 생성 요청 데이터:', requestData);
+    
+    // API 호출
+    fetch('/config/api/generate-script', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(requestData)
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
-            showToast('스크립트가 생성되었습니다.', 'success');
-            if (data.data && data.data.script) {
-                document.getElementById('scriptPreview').textContent = data.data.script;
-                $('#previewModal').modal('show');
+            const scriptOutput = document.getElementById('scriptOutput');
+            const scriptOutputContainer = document.getElementById('scriptOutputContainer');
+            
+            if (scriptOutput && scriptOutputContainer) {
+                scriptOutput.value = data.data.script;
+                scriptOutputContainer.classList.remove('d-none');
+                showToast('스크립트가 생성되었습니다.', 'success');
+            } else {
+                console.error('스크립트 출력 요소를 찾을 수 없음');
+                showToast('스크립트 출력 요소를 찾을 수 없습니다.', 'error');
             }
         } else {
             showToast(data.message || '스크립트 생성에 실패했습니다.', 'error');
@@ -260,85 +407,57 @@ function generateScript() {
     })
     .catch(error => {
         console.error('스크립트 생성 실패:', error);
-        showToast('스크립트 생성에 실패했습니다.', 'error');
+        showToast('스크립트 생성 중 오류가 발생했습니다.', 'error');
     });
 }
 
-// 스크립트 미리보기
-function previewScript() {
-    const deviceId = document.getElementById('deviceSelect').value;
-    const taskType = document.getElementById('taskType').value;
-    const subtaskType = document.getElementById('subtaskType').value;
-    const configDetails = document.getElementById('configDetailsContainer').innerHTML;
-
-    if (!deviceId || !taskType || !subtaskType || !configDetails) {
-        showToast('모든 필드를 입력해주세요.', 'error');
-        return;
-    }
-
-    fetch('/api/config/preview-script', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            device_id: deviceId,
-            task_type: taskType,
-            subtask_type: subtaskType,
-            config_details: configDetails
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            document.getElementById('scriptPreview').textContent = data.script;
-            $('#previewModal').modal('show');
-        } else {
-            showToast(data.message || '스크립트 미리보기에 실패했습니다.', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('스크립트 미리보기 실패:', error);
-        showToast('스크립트 미리보기에 실패했습니다.', 'error');
-    });
+// 스크립트 복사
+function copyScript() {
+    const scriptOutput = document.getElementById('scriptOutput');
+    scriptOutput.select();
+    document.execCommand('copy');
+    showToast('스크립트가 클립보드에 복사되었습니다.', 'success');
 }
 
 // 스크립트 실행
 function executeScript() {
     const deviceId = document.getElementById('deviceSelect').value;
-    const taskType = document.getElementById('taskType').value;
-    const subtaskType = document.getElementById('subtaskType').value;
-    const configDetails = document.getElementById('configDetailsContainer').innerHTML;
+    const scriptContent = document.getElementById('scriptOutput').value;
 
-    if (!deviceId || !taskType || !subtaskType || !configDetails) {
-        showToast('모든 필드를 입력해주세요.', 'error');
+    if (!deviceId || !scriptContent) {
+        showToast('장비와 스크립트를 확인해주세요.', 'error');
         return;
     }
 
-    fetch('/api/config/execute-script', {
+    fetch('/config/api/execute-script', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
             device_id: deviceId,
-            task_type: taskType,
-            subtask_type: subtaskType,
-            config_details: configDetails
+            script: scriptContent
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
+            document.getElementById('scriptResult').textContent = data.result || '명령이 성공적으로 실행되었습니다.';
+            const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
+            resultModal.show();
             showToast('스크립트가 실행되었습니다.', 'success');
-            $('#previewModal').modal('hide');
         } else {
             showToast(data.message || '스크립트 실행에 실패했습니다.', 'error');
         }
     })
     .catch(error => {
         console.error('스크립트 실행 실패:', error);
-        showToast('스크립트 실행에 실패했습니다.', 'error');
+        showToast('스크립트 실행 중 오류가 발생했습니다.', 'error');
     });
 }
 
@@ -351,17 +470,68 @@ function showToast(message, type = 'success') {
     toastTitle.textContent = type === 'success' ? '성공' : '오류';
     toastMessage.textContent = message;
     
+    // Bootstrap 5의 Toast 객체 생성 및 표시
     const bsToast = new bootstrap.Toast(toast);
     bsToast.show();
 }
 
 // 이벤트 리스너 등록
 document.addEventListener('DOMContentLoaded', () => {
+    // 페이지 초기화
+    initPage();
+    
+    // 작업 유형 테이블 초기화 버튼 이벤트 리스너
+    const resetBtn = document.getElementById('resetTaskTypesBtn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+            resetTaskTypes();
+        });
+    }
+});
+
+// 페이지 초기화
+function initPage() {
     loadDevices();
     loadTaskTypes();
     
     // 작업 유형 체크박스 이벤트
     document.getElementById('taskTypeContainer').addEventListener('change', updateTaskForms);
-});
+    
+    // 장비 선택 이벤트
+    document.getElementById('deviceSelect').addEventListener('change', function() {
+        // 작업 유형 체크박스 초기화
+        const checkboxes = document.querySelectorAll('#taskTypeContainer input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = false);
+        
+        // 작업 폼 초기화
+        document.getElementById('taskFormsContainer').innerHTML = '';
+        
+        // 스크립트 출력 영역 숨기기
+        document.getElementById('scriptOutputContainer').classList.add('d-none');
+    });
+}
+
+// 작업 유형 테이블 초기화
+function resetTaskTypes() {
+    if (!confirm('작업 유형 테이블을 초기화하시겠습니까? 모든 작업 유형이 기본값으로 재설정됩니다.')) {
+        return;
+    }
+    
+    fetch('/config/api/reset-task-types')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('작업 유형 테이블이 초기화되었습니다. 총 ' + data.count + '개의 작업 유형이 추가되었습니다.', 'success');
+                // 작업 유형 목록 다시 로드
+                loadTaskTypes();
+            } else {
+                showToast('작업 유형 테이블 초기화 실패: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('작업 유형 테이블 초기화 실패:', error);
+            showToast('작업 유형 테이블 초기화 중 오류가 발생했습니다.', 'error');
+        });
+}
 </script>
 {% endblock %} 

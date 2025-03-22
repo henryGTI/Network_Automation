@@ -1,280 +1,205 @@
 ﻿// 전역 변수
-let commands = {};  // 벤더별 명령어 저장
-let selectedVendor = '';  // 선택된 벤더
+let currentCommand = null;
+let templates = {};
 
-// 페이지 로드 시 실행
+// DOM 로드 완료 후 초기화
 document.addEventListener('DOMContentLoaded', function() {
+    initializeUI();
+    loadTemplates();
     loadCommands();
-    setupEventListeners();
 });
 
-// 이벤트 리스너 설정
-function setupEventListeners() {
-    // 벤더 선택 이벤트
-    const vendorSelect = document.getElementById('vendor-select');
-    if (vendorSelect) {
-        vendorSelect.addEventListener('change', function() {
-            selectedVendor = this.value;
-            displayCommands(commands[selectedVendor] || []);
-        });
-    }
+// UI 초기화
+function initializeUI() {
+    // 이벤트 리스너 등록
+    document.getElementById('vendor').addEventListener('change', handleVendorChange);
+    document.getElementById('device-type').addEventListener('change', handleDeviceTypeChange);
+    document.getElementById('task-type').addEventListener('change', handleTaskTypeChange);
+    document.getElementById('command-form').addEventListener('submit', handleSubmit);
+    document.getElementById('clearBtn').addEventListener('click', clearForm);
+}
 
-    // 명령어 검색 이벤트
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', debounce(function() {
-            searchCommands(this.value);
-        }, 300));
-    }
-
-    // 명령어 추가 폼 제출 이벤트
-    const addForm = document.getElementById('add-command-form');
-    if (addForm) {
-        addForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            addCommand(this);
-        });
+// 템플릿 로드
+async function loadTemplates() {
+    try {
+        const response = await fetch('/api/learning/templates');
+        if (!response.ok) throw new Error('템플릿 로드 실패');
+        templates = await response.json();
+    } catch (error) {
+        showToast('오류', '템플릿 로드 중 오류가 발생했습니다.', 'error');
     }
 }
 
-// 명령어 목록 로드
+// CLI 명령어 목록 로드
 async function loadCommands() {
     try {
-        showLoading();
         const response = await fetch('/api/learning/commands');
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            commands = result.data;
-            updateVendorSelect();
-            if (selectedVendor) {
-                displayCommands(commands[selectedVendor] || []);
-            }
-        } else {
-            showError('명령어 목록을 불러오는데 실패했습니다.');
-        }
+        if (!response.ok) throw new Error('명령어 목록 로드 실패');
+        const commands = await response.json();
+        displayCommands(commands);
     } catch (error) {
-        console.error('명령어 로드 오류:', error);
-        showError('명령어 목록을 불러오는데 실패했습니다.');
-    } finally {
-        hideLoading();
+        showToast('오류', '명령어 목록 로드 중 오류가 발생했습니다.', 'error');
     }
-}
-
-// 벤더 선택 옵션 업데이트
-function updateVendorSelect() {
-    const vendorSelect = document.getElementById('vendor-select');
-    if (!vendorSelect) return;
-
-    vendorSelect.innerHTML = '<option value="">벤더 선택</option>';
-    Object.keys(commands).forEach(vendor => {
-        const option = document.createElement('option');
-        option.value = vendor;
-        option.textContent = vendor.charAt(0).toUpperCase() + vendor.slice(1);
-        if (vendor === selectedVendor) {
-            option.selected = true;
-        }
-        vendorSelect.appendChild(option);
-    });
 }
 
 // 명령어 목록 표시
-function displayCommands(commandList) {
-    const container = document.getElementById('commands-container');
-    if (!container) return;
-
-    if (!Array.isArray(commandList)) {
-        commandList = [];
-    }
-
-    container.innerHTML = commandList.length === 0 ? 
-        '<p class="text-center">등록된 명령어가 없습니다.</p>' :
-        `<div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>명령어</th>
-                        <th>설명</th>
-                        <th>모드</th>
-                        <th>작업</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${commandList.map(cmd => `
-                        <tr>
-                            <td>${escapeHtml(cmd.command)}</td>
-                            <td>${escapeHtml(cmd.description)}</td>
-                            <td>${escapeHtml(cmd.mode || '-')}</td>
-                            <td>
-                                <button class="btn btn-sm btn-danger" onclick="deleteCommand('${escapeHtml(cmd.vendor)}', '${escapeHtml(cmd.command)}')">
-                                    삭제
-                                </button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>`;
+function displayCommands(commands) {
+    const commandList = document.getElementById('command-list');
+    commandList.innerHTML = '';
+    
+    commands.forEach(cmd => {
+        const item = document.createElement('a');
+        item.className = 'list-group-item list-group-item-action';
+        item.innerHTML = `
+            <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">${cmd.vendor} - ${cmd.task_type}</h6>
+                <small>${new Date(cmd.created_at).toLocaleDateString()}</small>
+            </div>
+            <p class="mb-1">${cmd.subtask}</p>
+        `;
+        item.addEventListener('click', () => loadCommand(cmd));
+        commandList.appendChild(item);
+    });
 }
 
-// 명령어 검색
-async function searchCommands(query) {
-    if (!query) {
-        if (selectedVendor) {
-            displayCommands(commands[selectedVendor] || []);
-        }
+// 명령어 로드
+function loadCommand(command) {
+    currentCommand = command;
+    
+    // 폼 필드 채우기
+    document.getElementById('vendor').value = command.vendor;
+    document.getElementById('device-type').value = command.device_type;
+    document.getElementById('task-type').value = command.task_type;
+    document.getElementById('subtask').value = command.subtask;
+    document.getElementById('command').value = command.command;
+    document.getElementById('description').value = command.description || '';
+    
+    // 파라미터 표시
+    displayParameters(command.parameters || {});
+}
+
+// 벤더 변경 처리
+function handleVendorChange(event) {
+    const vendor = event.target.value;
+    if (!vendor) return;
+    
+    // 장비 유형 옵션 업데이트
+    const deviceTypeSelect = document.getElementById('device-type');
+    deviceTypeSelect.innerHTML = '<option value="">선택하세요</option>';
+    
+    // 작업 유형 옵션 업데이트
+    const taskTypeSelect = document.getElementById('task-type');
+    taskTypeSelect.innerHTML = '<option value="">선택하세요</option>';
+    
+    if (templates[vendor]) {
+        Object.entries(templates[vendor]).forEach(([key, value]) => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = value.name;
+            taskTypeSelect.appendChild(option);
+        });
+    }
+}
+
+// 장비 유형 변경 처리
+function handleDeviceTypeChange(event) {
+    // 필요한 경우 장비 유형별 추가 로직 구현
+}
+
+// 작업 유형 변경 처리
+function handleTaskTypeChange(event) {
+    const vendor = document.getElementById('vendor').value;
+    const taskType = event.target.value;
+    
+    if (!vendor || !taskType || !templates[vendor] || !templates[vendor][taskType]) {
         return;
     }
-
-    try {
-        showLoading();
-        const response = await fetch(`/api/learning/commands?query=${encodeURIComponent(query)}${selectedVendor ? `&vendor=${encodeURIComponent(selectedVendor)}` : ''}`);
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            displayCommands(result.data);
-        } else {
-            showError('명령어 검색에 실패했습니다.');
-        }
-    } catch (error) {
-        console.error('명령어 검색 오류:', error);
-        showError('명령어 검색에 실패했습니다.');
-    } finally {
-        hideLoading();
-    }
+    
+    const template = templates[vendor][taskType];
+    displayParameters(template.parameters || {});
 }
 
-// 새 명령어 추가
-async function addCommand(form) {
-    const formData = {
-        vendor: form.querySelector('#command-vendor').value,
-        command: form.querySelector('#command-text').value,
-        description: form.querySelector('#command-description').value,
-        mode: form.querySelector('#command-mode').value,
-        parameters: form.querySelector('#command-parameters').value
-            .split('\n')
-            .map(p => p.trim())
-            .filter(p => p),
-        examples: form.querySelector('#command-examples').value
-            .split('\n')
-            .map(e => e.trim())
-            .filter(e => e)
-    };
+// 파라미터 표시
+function displayParameters(parameters) {
+    const container = document.getElementById('parameters-container');
+    container.innerHTML = '';
+    
+    Object.entries(parameters).forEach(([key, value]) => {
+        const div = document.createElement('div');
+        div.className = 'mb-3';
+        div.innerHTML = `
+            <label class="form-label">${key}</label>
+            <input type="text" class="form-control" name="${key}" value="${value}">
+        `;
+        container.appendChild(div);
+    });
+}
 
+// 폼 제출 처리
+async function handleSubmit(event) {
+    event.preventDefault();
+    
+    const formData = {
+        vendor: document.getElementById('vendor').value,
+        device_type: document.getElementById('device-type').value,
+        task_type: document.getElementById('task-type').value,
+        subtask: document.getElementById('subtask').value,
+        command: document.getElementById('command').value,
+        description: document.getElementById('description').value,
+        parameters: {}
+    };
+    
+    // 파라미터 수집
+    const parameterInputs = document.querySelectorAll('#parameters-container input');
+    parameterInputs.forEach(input => {
+        formData.parameters[input.name] = input.value;
+    });
+    
     try {
-        showLoading();
-        const response = await fetch('/api/learning/commands', {
-            method: 'POST',
+        const url = currentCommand 
+            ? `/api/learning/commands/${currentCommand.id}`
+            : '/api/learning/commands';
+            
+        const method = currentCommand ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
             headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(formData)
         });
         
-        const result = await response.json();
-        if (response.ok && result.status === 'success') {
-            showSuccess('명령어가 추가되었습니다.');
-            form.reset();
-            await loadCommands();
-        } else {
-            showError(result.message || '명령어 추가에 실패했습니다.');
-        }
-    } catch (error) {
-        console.error('명령어 추가 오류:', error);
-        showError('명령어 추가에 실패했습니다.');
-    } finally {
-        hideLoading();
-    }
-}
-
-// 명령어 삭제
-async function deleteCommand(vendor, command) {
-    if (!confirm('이 명령어를 삭제하시겠습니까?')) {
-        return;
-    }
-
-    try {
-        showLoading();
-        const response = await fetch(`/api/learning/commands/${encodeURIComponent(vendor)}/${encodeURIComponent(command)}`, {
-            method: 'DELETE'
-        });
+        if (!response.ok) throw new Error('명령어 저장 실패');
         
-        const result = await response.json();
-        if (response.ok && result.status === 'success') {
-            showSuccess('명령어가 삭제되었습니다.');
-            await loadCommands();
-        } else {
-            showError(result.message || '명령어 삭제에 실패했습니다.');
-        }
+        showToast('성공', '명령어가 저장되었습니다.', 'success');
+        clearForm();
+        loadCommands();
     } catch (error) {
-        console.error('명령어 삭제 오류:', error);
-        showError('명령어 삭제에 실패했습니다.');
-    } finally {
-        hideLoading();
+        showToast('오류', '명령어 저장 중 오류가 발생했습니다.', 'error');
     }
 }
 
-// 유틸리티 함수
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func.apply(this, args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+// 폼 초기화
+function clearForm() {
+    currentCommand = null;
+    document.getElementById('command-form').reset();
+    document.getElementById('parameters-container').innerHTML = '';
 }
 
-function showLoading() {
-    const loading = document.getElementById('loading');
-    if (loading) {
-        loading.style.display = 'block';
-    }
-}
-
-function hideLoading() {
-    const loading = document.getElementById('loading');
-    if (loading) {
-        loading.style.display = 'none';
-    }
-}
-
-function showError(message) {
-    const alert = document.createElement('div');
-    alert.className = 'alert alert-danger alert-dismissible fade show';
-    alert.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
+// 토스트 메시지 표시
+function showToast(title, message, type = 'info') {
+    const toast = document.getElementById('toast');
+    const toastTitle = document.getElementById('toast-title');
+    const toastMessage = document.getElementById('toast-message');
     
-    const container = document.querySelector('.container');
-    if (container) {
-        container.insertBefore(alert, container.firstChild);
-    }
-}
-
-function showSuccess(message) {
-    const alert = document.createElement('div');
-    alert.className = 'alert alert-success alert-dismissible fade show';
-    alert.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
+    toastTitle.textContent = title;
+    toastMessage.textContent = message;
     
-    const container = document.querySelector('.container');
-    if (container) {
-        container.insertBefore(alert, container.firstChild);
-    }
-}
-
-function escapeHtml(unsafe) {
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    // 토스트 타입에 따른 스타일 설정
+    toast.className = 'toast';
+    toast.classList.add(`bg-${type}`);
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
 }

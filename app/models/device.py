@@ -1,31 +1,32 @@
-﻿class Device:
-    def __init__(self, name, vendor, ip, model, id=None):
-        self.id = id
-        self.name = name
-        self.validate_vendor_and_model(vendor, model)
-        self.vendor = vendor
-        self.ip = ip
-        self.model = model
+﻿from app.database import db
+from datetime import datetime
 
-    def validate_vendor_and_model(self, vendor, model):
-        vendor_lower = vendor.lower()
-        if vendor_lower not in VENDOR_LIST:
-            valid_vendors = ', '.join(VENDOR_LIST.keys())
-            raise ValueError(f"지원하지 않는 벤더입니다. 지원되는 벤더: {valid_vendors}")
-        
-        vendor_info = VENDOR_LIST[vendor_lower]
-        if model not in vendor_info['models']:
-            valid_models = ', '.join(vendor_info['models'])
-            raise ValueError(f"지원하지 않는 모델입니다. {vendor}의 지원 모델: {valid_models}")
+class Device(db.Model):
+    __tablename__ = 'devices'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    ip_address = db.Column(db.String(15), nullable=False)
+    vendor = db.Column(db.String(50), nullable=False)
+    device_type = db.Column(db.String(50), nullable=False)
+    username = db.Column(db.String(50), nullable=False)
+    password = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), default='offline')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
+            'ip_address': self.ip_address,
             'vendor': self.vendor,
-            'ip': self.ip,
-            'model': self.model
-        } 
+            'device_type': self.device_type,
+            'username': self.username,
+            'status': self.status,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
 
 VENDOR_TEMPLATES = {
     'cisco': {

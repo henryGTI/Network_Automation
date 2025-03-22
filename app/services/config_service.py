@@ -100,6 +100,244 @@ class ConfigService:
             return True
         return False
 
+    def generate_script(self, device_id, task_types, subtask_type, vendor, parameters):
+        """스크립트 생성 메소드
+        
+        Args:
+            device_id (str): 장비 ID
+            task_types (list): 작업 유형 목록
+            subtask_type (dict): 작업 유형별 상세 작업 딕셔너리
+            vendor (str): 장비 벤더
+            parameters (dict): 작업 유형별 파라미터 딕셔너리
+            
+        Returns:
+            str: 생성된 스크립트
+        """
+        try:
+            logger.info(f"스크립트 생성 시작: 장비={device_id}, 벤더={vendor}, 작업={task_types}")
+            
+            # 벤더별 명령어 템플릿 정의
+            templates = {
+                'cisco': {
+                    'vlan_config': {
+                        'name': 'VLAN 생성/삭제',
+                        'template': [
+                            'configure terminal',
+                            'vlan {vlan_id}',
+                            'name {vlan_name}',
+                            'exit'
+                        ]
+                    },
+                    'interface_config': {
+                        'name': '인터페이스 설정',
+                        'template': [
+                            'configure terminal',
+                            'interface {interface_name}',
+                            'description {interface_desc}',
+                            '{interface_status}',
+                            'exit'
+                        ]
+                    },
+                    'vlan_interface': {
+                        'name': 'VLAN 인터페이스 설정',
+                        'template': [
+                            'configure terminal',
+                            'interface {interface_name}',
+                            'switchport mode {mode}',
+                            'switchport {mode} vlan {vlan_id}',
+                            'exit'
+                        ]
+                    },
+                    'ip_config': {
+                        'name': 'IP 주소 설정',
+                        'template': [
+                            'configure terminal',
+                            'interface {interface_name}',
+                            'ip address {ip_address} {subnet_mask}',
+                            'no shutdown',
+                            'exit'
+                        ]
+                    },
+                    'routing_config': {
+                        'name': '라우팅 설정',
+                        'template': [
+                            'configure terminal',
+                            'router {protocol} {process_id}',
+                            'network {network_address} {wildcard_mask} area {area_id}',
+                            'exit'
+                        ]
+                    },
+                    'acl_config': {
+                        'name': 'ACL 설정',
+                        'template': [
+                            'configure terminal',
+                            'ip access-list {acl_type} {acl_number}',
+                            '{action} {acl_rule}',
+                            'exit'
+                        ]
+                    },
+                    'snmp_config': {
+                        'name': 'SNMP 설정',
+                        'template': [
+                            'configure terminal',
+                            'snmp-server community {snmp_community} {access_type}',
+                            'snmp-server host {host} version {snmp_version} {community}',
+                            'exit'
+                        ]
+                    },
+                    'ntp_config': {
+                        'name': 'NTP 설정',
+                        'template': [
+                            'configure terminal',
+                            'ntp server {ntp_server}',
+                            'exit'
+                        ]
+                    }
+                },
+                'juniper': {
+                    'vlan_config': {
+                        'name': 'VLAN 생성/삭제',
+                        'template': [
+                            'configure',
+                            'set vlans {vlan_name} vlan-id {vlan_id}',
+                            'commit'
+                        ]
+                    },
+                    'interface_config': {
+                        'name': '인터페이스 설정',
+                        'template': [
+                            'configure',
+                            'set interfaces {interface_name} description "{interface_desc}"',
+                            'commit'
+                        ]
+                    }
+                },
+                'huawei': {
+                    'vlan_config': {
+                        'name': 'VLAN 생성/삭제',
+                        'template': [
+                            'system-view',
+                            'vlan {vlan_id}',
+                            'name {vlan_name}',
+                            'quit'
+                        ]
+                    }
+                }
+            }
+            
+            # 지원하는 벤더인지 확인
+            if vendor.lower() not in templates:
+                raise ValueError(f"지원하지 않는 벤더입니다: {vendor}")
+            
+            # 스크립트 생성
+            script_lines = []
+            script_lines.append(f"! 설정 스크립트 - 생성일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            script_lines.append(f"! 장비 ID: {device_id}")
+            script_lines.append(f"! 벤더: {vendor}")
+            script_lines.append("!")
+            
+            vendor_templates = templates[vendor.lower()]
+            
+            # 각 작업 유형별로 스크립트 생성
+            for task_type in task_types:
+                subtask = subtask_type.get(task_type)
+                task_params = parameters.get(task_type, {})
+                
+                # 작업 유형과 상세 작업에 맞는 템플릿 찾기
+                template_found = False
+                for template_key, template_data in vendor_templates.items():
+                    if template_data['name'] == task_type or template_key == task_type:
+                        template_found = True
+                        script_lines.append(f"! {task_type} - {subtask}")
+                        
+                        # 템플릿에 파라미터 적용
+                        for cmd_template in template_data['template']:
+                            try:
+                                cmd = cmd_template.format(**task_params)
+                                script_lines.append(cmd)
+                            except KeyError as e:
+                                # 필수 파라미터가 없는 경우 경고
+                                logger.warning(f"필수 파라미터 누락: {e}")
+                                script_lines.append(f"! 주의: {e} 파라미터가 필요합니다")
+                        
+                        script_lines.append("!")
+                
+                if not template_found:
+                    script_lines.append(f"! {task_type} - {subtask}")
+                    script_lines.append(f"! 주의: '{task_type}'에 대한 템플릿이 없습니다")
+                    script_lines.append("!")
+            
+            script_content = "\n".join(script_lines)
+            logger.info("스크립트 생성 완료")
+            
+            return script_content
+            
+        except Exception as e:
+            logger.error(f"스크립트 생성 실패: {str(e)}")
+            raise ValueError(f"스크립트 생성 실패: {str(e)}")
+    
+    def execute_script(self, device_id, script):
+        """스크립트 실행 메소드
+        
+        Args:
+            device_id (str): 장비 ID
+            script (str): 실행할 스크립트
+            
+        Returns:
+            str: 실행 결과
+        """
+        try:
+            logger.info(f"스크립트 실행 시작: 장비={device_id}, 스크립트 길이={len(script)}")
+            
+            # 실행 결과를 저장할 디렉토리
+            result_dir = os.path.join(self.base_dir, str(device_id), "results")
+            ensure_directory_exists(result_dir)
+            
+            # 실행할 스크립트 저장
+            script_filename = f"script_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            script_path = os.path.join(result_dir, script_filename)
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(script)
+            
+            # TODO: 실제 장비 연결 및 명령 실행 로직
+            # 여기서는 시뮬레이션만 수행
+            
+            # 실행 결과 생성
+            result_lines = []
+            result_lines.append(f"=== 스크립트 실행 결과 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
+            result_lines.append(f"장비 ID: {device_id}")
+            result_lines.append("")
+            
+            # 각 명령어 실행 결과 시뮬레이션
+            for line in script.splitlines():
+                if line.startswith('!') or not line.strip():
+                    continue
+                    
+                result_lines.append(f"> {line}")
+                # 명령어에 따른 결과 시뮬레이션
+                if "show" in line:
+                    result_lines.append("시뮬레이션된 출력 결과")
+                    result_lines.append("")
+                else:
+                    # 설정 명령어는 성공 응답만 표시
+                    result_lines.append("명령 성공적으로 실행됨")
+                    result_lines.append("")
+            
+            # 실행 결과 저장
+            result_filename = f"result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            result_path = os.path.join(result_dir, result_filename)
+            result_content = "\n".join(result_lines)
+            with open(result_path, 'w', encoding='utf-8') as f:
+                f.write(result_content)
+            
+            logger.info(f"스크립트 실행 완료, 결과 저장: {result_path}")
+            
+            return result_content
+            
+        except Exception as e:
+            logger.error(f"스크립트 실행 중 오류: {str(e)}")
+            raise ValueError(f"스크립트 실행 실패: {str(e)}")
+
     def get_task_parameters(self, task_type, subtask):
         """작업 유형별 필요한 파라미터 정보 반환"""
         parameters = {

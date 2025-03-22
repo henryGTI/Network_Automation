@@ -71,22 +71,25 @@ class DeviceService:
             devices = self.file_handler.load_devices()
             new_id = len(devices) + 1
             
-            device = Device(
-                id=new_id,
-                name=device_data['name'],
-                ip=device_data['ip'],
-                vendor=device_data['vendor'].lower(),
-                model=device_data['model']
-            )
+            # 파일에 저장할 때는 정해진 필드 형식을 사용
+            device_dict = {
+                'id': new_id,
+                'name': device_data['name'],
+                'ip': device_data['ip'],
+                'vendor': device_data['vendor'].lower(),
+                'model': device_data.get('model', ''),
+                'username': device_data.get('username', ''),
+                'password': device_data.get('password', '')
+            }
             
-            devices.append(device.to_dict())
+            devices.append(device_dict)
             
             # 백업 후 저장
             if self.backup_devices():
                 if not self.file_handler.save_devices(devices):
                     raise ValueError("장비 데이터 저장 실패")
                 logger.info(f"장비 추가 성공: {device_data['name']}")
-                return device.to_dict()
+                return device_dict
             else:
                 raise ValueError("백업 실패로 인한 저장 중단")
                 
@@ -110,22 +113,26 @@ class DeviceService:
                 raise ValueError("이미 등록된 IP 주소")
 
             current_device = devices[device_index]
-            device = Device(
-                id=current_device['id'],
-                name=device_data['name'],
-                ip=device_data['ip'],
-                vendor=device_data['vendor'].lower(),
-                model=device_data['model']
-            )
             
-            devices[device_index] = device.to_dict()
+            # 파일에 저장할 때는 정해진 필드 형식을 사용
+            device_dict = {
+                'id': current_device['id'],
+                'name': device_data['name'],
+                'ip': device_data['ip'],
+                'vendor': device_data['vendor'].lower(),
+                'model': device_data.get('model', ''),
+                'username': device_data.get('username', ''),
+                'password': device_data.get('password', '')
+            }
+            
+            devices[device_index] = device_dict
             
             # 백업 후 저장
             if self.backup_devices():
                 if not self.file_handler.save_devices(devices):
                     raise ValueError("장비 데이터 저장 실패")
                 logger.info(f"장비 수정 성공: {name}")
-                return device.to_dict()
+                return device_dict
             else:
                 raise ValueError("백업 실패로 인한 저장 중단")
                 

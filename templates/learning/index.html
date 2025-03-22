@@ -1,88 +1,133 @@
 ﻿{% extends "base.html" %}
 
-{% block title %}CLI 학습{% endblock %}
+{% block title %}자동학습{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">CLI 명령어 학습</h1>
-
-    <!-- 로딩 표시 -->
-    <div id="loading" class="text-center" style="display: none;">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">로딩중...</span>
-        </div>
-    </div>
-
-    <div class="row mb-4">
-        <!-- 명령어 추가 폼 -->
+<div class="container-fluid">
+    <div class="row">
+        <!-- CLI 명령어 목록 -->
         <div class="col-md-4">
             <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">새 명령어 추가</h5>
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">CLI 명령어 목록</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="command-list">
+                        <!-- CLI 명령어 목록이 여기에 동적으로 로드됩니다 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 명령어 상세 정보 -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">명령어 상세 정보</h5>
                 </div>
                 <div class="card-body">
-                    <form id="add-command-form">
-                        <div class="mb-3">
-                            <label for="command-vendor" class="form-label">벤더</label>
-                            <select class="form-select" id="command-vendor" required>
-                                <option value="">선택하세요</option>
-                                <option value="cisco">Cisco</option>
-                                <option value="juniper">Juniper</option>
-                                <option value="hp">HP</option>
-                                <option value="arista">Arista</option>
-                                <option value="handreamnet">Handreamnet</option>
-                                <option value="coreedge">CoreEdge</option>
-                            </select>
+                    <form id="command-form">
+                        <div class="row g-3">
+                            <!-- 벤더 선택 -->
+                            <div class="col-md-6">
+                                <label for="vendor" class="form-label">벤더</label>
+                                <select class="form-select" id="vendor" name="vendor" required>
+                                    <option value="">선택하세요</option>
+                                    <option value="cisco">Cisco</option>
+                                    <option value="juniper">Juniper</option>
+                                    <option value="arista">Arista</option>
+                                    <option value="hp">HP</option>
+                                </select>
+                            </div>
+
+                            <!-- 장비 유형 -->
+                            <div class="col-md-6">
+                                <label for="device-type" class="form-label">장비 유형</label>
+                                <select class="form-select" id="device-type" name="device_type" required>
+                                    <option value="">선택하세요</option>
+                                    <option value="switch">스위치</option>
+                                    <option value="router">라우터</option>
+                                    <option value="firewall">방화벽</option>
+                                </select>
+                            </div>
+
+                            <!-- 작업 유형 -->
+                            <div class="col-md-6">
+                                <label for="task-type" class="form-label">작업 유형</label>
+                                <select class="form-select" id="task-type" name="task_type" required>
+                                    <option value="">선택하세요</option>
+                                    <option value="vlan">VLAN 관리</option>
+                                    <option value="port">포트 설정</option>
+                                    <option value="routing">라우팅 설정</option>
+                                    <option value="security">보안 설정</option>
+                                </select>
+                            </div>
+
+                            <!-- 상세 작업 -->
+                            <div class="col-md-6">
+                                <label for="subtask" class="form-label">상세 작업</label>
+                                <select class="form-select" id="subtask" name="subtask" required>
+                                    <option value="">선택하세요</option>
+                                </select>
+                            </div>
+
+                            <!-- CLI 명령어 -->
+                            <div class="col-12">
+                                <label for="command" class="form-label">CLI 명령어</label>
+                                <textarea class="form-control" id="command" name="command" rows="3" required></textarea>
+                                <div class="form-text">
+                                    파라미터는 {parameter_name} 형식으로 입력하세요.
+                                    예: interface {interface_name}
+                                </div>
+                            </div>
+
+                            <!-- 파라미터 -->
+                            <div class="col-12">
+                                <label class="form-label">파라미터</label>
+                                <div id="parameters-container" class="border p-3 rounded bg-light">
+                                    <!-- 파라미터 입력 필드가 여기에 동적으로 추가됩니다 -->
+                                </div>
+                            </div>
+
+                            <!-- 설명 -->
+                            <div class="col-12">
+                                <label for="description" class="form-label">설명</label>
+                                <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                            </div>
+
+                            <!-- 버튼 -->
+                            <div class="col-12 text-end">
+                                <button type="button" class="btn btn-secondary" id="clearBtn">
+                                    <i class="bi bi-x-circle me-1"></i>초기화
+                                </button>
+                                <button type="submit" class="btn btn-primary" id="saveBtn">
+                                    <i class="bi bi-save me-1"></i>저장
+                                </button>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="command-text" class="form-label">명령어</label>
-                            <input type="text" class="form-control" id="command-text" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="command-description" class="form-label">설명</label>
-                            <textarea class="form-control" id="command-description" rows="2" required></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="command-mode" class="form-label">모드</label>
-                            <input type="text" class="form-control" id="command-mode" placeholder="예: config, exec">
-                        </div>
-                        <div class="mb-3">
-                            <label for="command-parameters" class="form-label">파라미터</label>
-                            <textarea class="form-control" id="command-parameters" rows="2" placeholder="한 줄에 하나씩 입력"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="command-examples" class="form-label">예제</label>
-                            <textarea class="form-control" id="command-examples" rows="2" placeholder="한 줄에 하나씩 입력"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">추가</button>
                     </form>
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- 명령어 목록 -->
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">명령어 목록</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <select class="form-select" id="vendor-select">
-                                <option value="">벤더 선택</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <input type="text" class="form-control" id="search-input" placeholder="명령어 검색...">
-                        </div>
-                    </div>
-                    <div id="commands-container">
-                        <!-- 명령어 목록이 여기에 표시됩니다 -->
-                    </div>
-                </div>
-            </div>
+<!-- 알림 메시지 -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong class="me-auto" id="toast-title">알림</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
+        <div class="toast-body" id="toast-message"></div>
+    </div>
+</div>
+
+<!-- 로딩 스피너 -->
+<div id="loading" class="position-fixed top-50 start-50 translate-middle" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
     </div>
 </div>
 {% endblock %}

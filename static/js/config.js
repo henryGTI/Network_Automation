@@ -29,9 +29,29 @@ function addEventListenerOnce(element, eventType, handler) {
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
     console.log('페이지 초기화 시작');
+    
+    // 브라우저 캐시 및 로컬 스토리지 초기화
+    clearCacheAndLocalStorage();
+    
     initializeUI();
     loadInitialData();
 });
+
+// 브라우저 캐시 및 로컬 스토리지 초기화
+function clearCacheAndLocalStorage() {
+    console.log('브라우저 캐시 및 로컬 스토리지 초기화');
+    
+    // 로컬 스토리지 초기화
+    localStorage.clear();
+    
+    // 세션 스토리지 초기화
+    sessionStorage.clear();
+    
+    // 작업 유형 및 상세 작업 초기화
+    selectedTasks.clear();
+    
+    console.log('캐시 및 스토리지 초기화 완료');
+}
 
 // UI 초기화
 function initializeUI() {
@@ -203,12 +223,58 @@ function displayDevices() {
 async function loadTaskTypes() {
     try {
         console.log('작업 유형 로딩 시작');
-        const response = await fetch('/api/config/task-types');
+        
+        // 기존 localStorage 데이터 초기화
+        localStorage.removeItem('taskTypes');
+        
+        // 첫 번째로 작업 유형 테이블 초기화 요청 (reset=true)
+        const timestamp = new Date().getTime();
+        console.log('작업 유형 테이블 초기화 요청');
+        const resetResponse = await fetch(`/config/api/task-types?reset=true&_=${timestamp}`, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
+        
+        if (!resetResponse.ok) {
+            console.warn('작업 유형 테이블 초기화 실패, 정상 로드 시도');
+        } else {
+            const resetData = await resetResponse.json();
+            console.log('작업 유형 테이블 초기화 응답:', resetData);
+        }
+        
+        // 작업 유형 데이터 로드 (이름만 요청)
+        console.log('작업 유형 데이터 로드 요청');
+        const response = await fetch(`/config/api/task-types?format=names_only&_=${timestamp}`, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const taskTypes = await response.json();
-        console.log('받은 작업 유형:', taskTypes);
+        
+        let taskTypes = await response.json();
+        console.log('받은 작업 유형 목록:', taskTypes);
+        
+        // 작업 유형이 객체 배열인 경우 이름만 추출
+        if (Array.isArray(taskTypes) && taskTypes.length > 0 && typeof taskTypes[0] === 'object') {
+            taskTypes = taskTypes.map(type => type.name || type);
+        }
+        
+        // 작업 유형이 비어있으면 오류 표시
+        if (!Array.isArray(taskTypes) || taskTypes.length === 0) {
+            console.error('작업 유형 목록이 비어있거나 유효하지 않음:', taskTypes);
+            showToast('작업 유형 목록을 불러오는데 실패했습니다', 'error');
+            return;
+        }
         
         const container = document.getElementById('task-type-container');
         if (!container) return;
@@ -254,12 +320,83 @@ async function handleTaskTypeChange(e) {
 async function loadSubtasks(taskType) {
     try {
         console.log('상세 작업 로딩 시작:', taskType);
-        const response = await fetch(`/api/config/subtasks/${encodeURIComponent(taskType)}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        
+        if (!taskType) {
+            console.error('작업 유형이 지정되지 않았습니다');
+            showToast('작업 유형을 선택해주세요', 'error');
+            return;
         }
+        
+        // 인터페이스 구성 -> 포트 설정으로 매핑
+        let mappedTaskType = taskType;
+        console.log('원본 작업 유형:', taskType);
+        
+        if (taskType === '인터페이스 구성') {
+            console.log('인터페이스 구성을 포트 설정으로 매핑합니다.');
+            mappedTaskType = '포트 설정';
+            showToast('인터페이스 구성은 포트 설정으로 변경되었습니다.', 'info');
+        }
+        
+        console.log('매핑된 작업 유형:', mappedTaskType);
+        
+        const timestamp = new Date().getTime();
+        const url = `/config/api/subtasks/${encodeURIComponent(mappedTaskType)}?_=${timestamp}`;
+        console.log('상세 작업 요청 URL:', url);
+        
+        const response = await fetch(url, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
+        
+        console.log('상세 작업 응답 상태:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            // 백업 접근 방법: 오류가 발생하면 다른 경로로 시도
+            console.warn(`${mappedTaskType} 상세 작업 로드 실패, 백업 방법 시도 중...`);
+            
+            // 포트 설정을 항상 시도
+            if (mappedTaskType !== '포트 설정') {
+                console.log('포트 설정 작업 유형으로 시도합니다.');
+                const backupResponse = await fetch(`/config/api/subtasks/${encodeURIComponent('포트 설정')}?_=${timestamp}`, {
+                    cache: 'no-store'
+                });
+                
+                console.log('백업 요청 응답 상태:', backupResponse.status, backupResponse.statusText);
+                
+                if (backupResponse.ok) {
+                    const backupSubtasks = await backupResponse.json();
+                    console.log('백업 방법으로 받은 상세 작업:', backupSubtasks);
+                    
+                    // 선택된 작업 유형의 상세 작업 목록 저장
+                    selectedTasks.set(taskType, {
+                        subtasks: backupSubtasks,
+                        selected: new Set()
+                    });
+                    
+                    updateSubtaskContainer();
+                    showToast(`${taskType}의 상세 작업을 '포트 설정'으로 대체했습니다.`, 'warning');
+                    return;
+                }
+            }
+            
+            // 에러 응답 본문 읽기
+            const errorText = await response.text();
+            console.error('상세 작업 로드 실패 응답 내용:', errorText);
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        
         const subtasks = await response.json();
         console.log('받은 상세 작업:', subtasks);
+        
+        if (!Array.isArray(subtasks) || subtasks.length === 0) {
+            console.error('상세 작업 데이터가 비어있거나 배열이 아님:', subtasks);
+            showToast(`${taskType}의 상세 작업이 없습니다.`, 'warning');
+            return;
+        }
         
         // 선택된 작업 유형의 상세 작업 목록 저장
         selectedTasks.set(taskType, {
@@ -269,8 +406,8 @@ async function loadSubtasks(taskType) {
         
         updateSubtaskContainer();
     } catch (error) {
-        console.error('상세 작업을 불러오는 중 오류 발생:', error);
-        showToast('상세 작업을 불러오는데 실패했습니다', 'error');
+        console.error(`${taskType}의 상세 작업 로드 실패:`, error);
+        showToast(`${taskType}의 상세 작업을 불러오는데 실패했습니다. 잠시 후 다시 시도해 주세요.`, 'error');
     }
 }
 
@@ -332,104 +469,161 @@ async function handleSubtaskChange(e) {
 async function loadParameters(taskType, subtask) {
     try {
         console.log('파라미터 로딩 시작:', taskType, subtask);
-        const response = await fetch(`/api/config/parameters/${encodeURIComponent(taskType)}/${encodeURIComponent(subtask)}`);
+        
+        if (!taskType || !subtask) {
+            console.error('작업 유형 또는 상세 작업이 지정되지 않았습니다');
+            return;
+        }
+        
+        // 인터페이스 구성 -> 포트 설정으로 매핑
+        let mappedTaskType = taskType;
+        if (taskType === '인터페이스 구성') {
+            console.log('인터페이스 구성을 포트 설정으로 매핑합니다.');
+            mappedTaskType = '포트 설정';
+        }
+        
+        const timestamp = new Date().getTime();
+        const response = await fetch(`/config/api/parameters/${encodeURIComponent(mappedTaskType)}/${encodeURIComponent(subtask)}?_=${timestamp}`, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
+        
         if (!response.ok) {
+            // 백업 접근 방법: 오류가 발생하면 다른 경로로 시도
+            console.warn(`${mappedTaskType}/${subtask} 파라미터 로드 실패, 백업 방법 시도 중...`);
+            
+            // 포트 설정으로 시도
+            if (mappedTaskType !== '포트 설정') {
+                console.log('포트 설정/인터페이스 활성화 파라미터로 시도합니다.');
+                const backupResponse = await fetch(`/config/api/parameters/${encodeURIComponent('포트 설정')}/${encodeURIComponent('인터페이스 활성화')}?_=${timestamp}`, {
+                    cache: 'no-store'
+                });
+                
+                if (backupResponse.ok) {
+                    const backupParameters = await backupResponse.json();
+                    console.log('백업 방법으로 받은 파라미터:', backupParameters);
+                    createParameterForm(taskType, subtask, backupParameters);
+                    showToast(`${taskType}/${subtask}의 파라미터를 대체 파라미터로 로드했습니다.`, 'warning');
+                    return;
+                }
+            }
+            
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
         const parameters = await response.json();
         console.log('받은 파라미터:', parameters);
         
-        const container = document.getElementById('parameters-container');
-        if (!container) return;
-
-        const paramSection = document.createElement('div');
-        paramSection.id = `params-${taskType}-${subtask}`;
-        paramSection.className = 'mb-4 border p-3 rounded bg-light';
+        if (!Array.isArray(parameters) || parameters.length === 0) {
+            console.warn('파라미터 데이터가 비어있거나 배열이 아님:', parameters);
+            showToast(`${taskType}/${subtask}의 파라미터가 없습니다.`, 'warning');
+            return;
+        }
         
-        paramSection.innerHTML = `
-            <h6 class="border-bottom pb-2 mb-3">${taskType} - ${subtask}</h6>
-            ${parameters.map(param => {
-                // 정규식 패턴 처리
-                let patternAttr = '';
-                if (param.pattern) {
-                    try {
-                        // 정규식 유효성 검사
-                        new RegExp(param.pattern);
-                        // 하이픈이 문자 클래스 끝에 오도록 패턴 수정
-                        const escapedPattern = param.pattern
-                            .replace(/\\/g, '\\\\')
-                            .replace(/"/g, '\\"')
-                            .replace(/\[([^\]]*)-([^\]]*)\]/g, '[$1\\-$2]');
-                        patternAttr = `pattern="${escapedPattern}"`;
-                    } catch (e) {
-                        console.warn('잘못된 정규식 패턴:', param.pattern);
-                        patternAttr = '';
-                    }
-                }
-
-                return `
-                    <div class="mb-3">
-                        <label for="param-${taskType}-${subtask}-${param.name}" class="form-label">
-                            ${param.name}${param.required ? ' <span class="text-danger">*</span>' : ''}
-                        </label>
-                        ${param.type === 'select' ? `
-                            <select class="form-select" 
-                                    id="param-${taskType}-${subtask}-${param.name}"
-                                    name="${param.name}"
-                                    ${param.required ? 'required' : ''}>
-                                <option value="">선택하세요</option>
-                                ${param.options.map(opt => `
-                                    <option value="${opt}">${opt}</option>
-                                `).join('')}
-                            </select>
-                        ` : `
-                            <input type="${param.type || 'text'}"
-                                   class="form-control"
-                                   id="param-${taskType}-${subtask}-${param.name}"
-                                   name="${param.name}"
-                                   placeholder="${param.placeholder || ''}"
-                                   ${patternAttr}
-                                   ${param.required ? 'required' : ''}>
-                        `}
-                        ${param.description ? `
-                            <div class="form-text">
-                                ${param.description}
-                                ${patternAttr ? `<br><small class="text-muted">형식: ${param.pattern}</small>` : ''}
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('')}
-        `;
-        
-        container.appendChild(paramSection);
-
-        // 입력값 유효성 검사 이벤트 리스너 추가
-        const inputs = paramSection.querySelectorAll('input[pattern]');
-        inputs.forEach(input => {
-            input.addEventListener('input', (e) => {
-                const pattern = new RegExp(input.pattern);
-                if (input.value && !pattern.test(input.value)) {
-                    input.classList.add('is-invalid');
-                    if (!input.nextElementSibling?.classList.contains('invalid-feedback')) {
-                        const feedback = document.createElement('div');
-                        feedback.className = 'invalid-feedback';
-                        feedback.textContent = `올바른 형식으로 입력해주세요. (${input.pattern})`;
-                        input.parentNode.insertBefore(feedback, input.nextSibling);
-                    }
-                } else {
-                    input.classList.remove('is-invalid');
-                    const feedback = input.nextElementSibling;
-                    if (feedback?.classList.contains('invalid-feedback')) {
-                        feedback.remove();
-                    }
-                }
-            });
-        });
+        createParameterForm(taskType, subtask, parameters);
     } catch (error) {
         console.error('파라미터를 불러오는 중 오류 발생:', error);
-        showToast('파라미터를 불러오는데 실패했습니다', 'error');
+        showToast(`${taskType}/${subtask}의 파라미터를 불러오는데 실패했습니다`, 'error');
     }
+}
+
+// 파라미터 폼 생성 함수 분리
+function createParameterForm(taskType, subtask, parameters) {
+    const container = document.getElementById('parameters-container');
+    if (!container) return;
+
+    const paramSection = document.createElement('div');
+    paramSection.id = `params-${taskType}-${subtask}`;
+    paramSection.className = 'mb-4 border p-3 rounded bg-light';
+    
+    paramSection.innerHTML = `
+        <h6 class="border-bottom pb-2 mb-3">${taskType} - ${subtask}</h6>
+        ${parameters.map(param => {
+            // 정규식 패턴 처리
+            let patternAttr = '';
+            if (param.pattern) {
+                try {
+                    // 정규식 유효성 검사
+                    new RegExp(param.pattern);
+                    // 하이픈이 문자 클래스 끝에 오도록 패턴 수정
+                    const escapedPattern = param.pattern
+                        .replace(/\\/g, '\\\\')
+                        .replace(/"/g, '\\"')
+                        .replace(/\[([^\]]*)-([^\]]*)\]/g, '[$1\\-$2]');
+                    patternAttr = `pattern="${escapedPattern}"`;
+                } catch (e) {
+                    console.warn('잘못된 정규식 패턴:', param.pattern);
+                    patternAttr = '';
+                }
+            }
+
+            return `
+                <div class="mb-3">
+                    <label for="param-${taskType}-${subtask}-${param.name}" class="form-label">
+                        ${param.label || param.name}${param.required ? ' <span class="text-danger">*</span>' : ''}
+                    </label>
+                    ${param.type === 'select' ? `
+                        <select class="form-select" 
+                                id="param-${taskType}-${subtask}-${param.name}"
+                                name="${param.name}"
+                                ${param.required ? 'required' : ''}>
+                            <option value="">선택하세요</option>
+                            ${Array.isArray(param.options) ? 
+                                param.options.map(opt => {
+                                    const optValue = typeof opt === 'object' ? opt.value : opt;
+                                    const optLabel = typeof opt === 'object' ? opt.label : opt;
+                                    return `<option value="${optValue}">${optLabel}</option>`;
+                                }).join('') 
+                                : ''}
+                        </select>
+                    ` : `
+                        <input type="${param.type || 'text'}"
+                               class="form-control"
+                               id="param-${taskType}-${subtask}-${param.name}"
+                               name="${param.name}"
+                               placeholder="${param.placeholder || ''}"
+                               ${patternAttr}
+                               ${param.required ? 'required' : ''}>
+                    `}
+                    ${param.description ? `
+                        <div class="form-text">
+                            ${param.description}
+                            ${patternAttr ? `<br><small class="text-muted">형식: ${param.pattern}</small>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('')}
+    `;
+    
+    container.appendChild(paramSection);
+    
+    // 입력값 유효성 검사 이벤트 리스너 추가
+    const inputs = paramSection.querySelectorAll('input[pattern]');
+    inputs.forEach(input => {
+        input.addEventListener('input', (e) => {
+            const pattern = new RegExp(input.pattern);
+            if (input.value && !pattern.test(input.value)) {
+                input.classList.add('is-invalid');
+                if (!input.nextElementSibling?.classList.contains('invalid-feedback')) {
+                    const feedback = document.createElement('div');
+                    feedback.className = 'invalid-feedback';
+                    feedback.textContent = `올바른 형식으로 입력해주세요. (${input.pattern})`;
+                    input.parentNode.insertBefore(feedback, input.nextSibling);
+                }
+            } else {
+                input.classList.remove('is-invalid');
+                const feedback = input.nextElementSibling;
+                if (feedback?.classList.contains('invalid-feedback')) {
+                    feedback.remove();
+                }
+            }
+        });
+    });
 }
 
 // 파라미터 섹션 제거
@@ -548,44 +742,36 @@ function renderParameters(parameters) {
 
 // 작업 추가
 async function addTask() {
-    if (!selectedDevice) {
+    const form = document.getElementById('task-form');
+    if (!form || !validateParameters()) return;
+    
+    const deviceId = selectedDevice.id;
+    if (!deviceId) {
         showError('장비를 선택해주세요.');
         return;
     }
-
-    const form = document.getElementById('task-form');
-    const taskType = form.querySelector('#task-type').value;
-    const subtask = form.querySelector('#subtask').value;
+    
+    const taskType = document.getElementById('task-type').value;
+    const subtask = document.getElementById('subtask').value;
     
     if (!taskType || !subtask) {
         showError('작업 유형과 상세 작업을 선택해주세요.');
         return;
     }
-
-    // 파라미터 수집 최적화
+    
+    // 파라미터 수집
     const parameters = {};
-    const paramInputs = form.querySelectorAll('#parameters-container input');
-    let hasEmptyRequired = false;
-
-    for (const input of paramInputs) {
-        if (input.required && !input.value.trim()) {
-            hasEmptyRequired = true;
-            input.classList.add('is-invalid');
-        } else {
-            input.classList.remove('is-invalid');
-            if (input.value.trim()) {
-                parameters[input.name] = input.value.trim();
-            }
+    const paramInputs = document.querySelectorAll('#parameters-container .form-control');
+    
+    paramInputs.forEach(input => {
+        if (input.id.startsWith('param-')) {
+            const paramName = input.id.replace('param-', '');
+            parameters[paramName] = input.value;
         }
-    }
-
-    if (hasEmptyRequired) {
-        showError('필수 파라미터를 모두 입력해주세요.');
-        return;
-    }
-
+    });
+    
     const requestData = {
-        device_id: selectedDevice.id,
+        device_id: deviceId,
         task_type: taskType,
         subtask: subtask,
         parameters: parameters
@@ -595,7 +781,7 @@ async function addTask() {
         showLoading();
         
         // 네트워크 요청 최적화
-        const response = await fetch('/api/config/tasks', {
+        const response = await fetch('/config/api/tasks', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -620,8 +806,8 @@ async function addTask() {
             showError(data.message || '작업 추가에 실패했습니다.');
         }
     } catch (error) {
-        console.error('Error adding task:', error);
-        showError('작업 추가에 실패했습니다.');
+        console.error('작업 추가 중 오류 발생:', error);
+        showError('서버 통신 중 오류가 발생했습니다.');
     } finally {
         hideLoading();
     }
@@ -629,13 +815,12 @@ async function addTask() {
 
 // 작업 삭제
 async function deleteTask(deviceId, taskIndex) {
-    if (!confirm('이 작업을 삭제하시겠습니까?')) {
-        return;
-    }
-
+    if (!confirm('정말로 이 작업을 삭제하시겠습니까?')) return;
+    
     try {
         showLoading();
-        const response = await fetch(`/api/config/tasks/${deviceId}/${taskIndex}`, {
+        
+        const response = await fetch(`/config/api/tasks/${deviceId}/${taskIndex}`, {
             method: 'DELETE'
         });
         
@@ -643,13 +828,13 @@ async function deleteTask(deviceId, taskIndex) {
         
         if (data.status === 'success') {
             showSuccess('작업이 삭제되었습니다.');
-            loadTasks(deviceId);
+            await loadTasks(deviceId);
         } else {
             showError(data.message || '작업 삭제에 실패했습니다.');
         }
     } catch (error) {
-        showError('작업 삭제에 실패했습니다.');
-        console.error('Error deleting task:', error);
+        console.error('작업 삭제 중 오류 발생:', error);
+        showError('서버 통신 중 오류가 발생했습니다.');
     } finally {
         hideLoading();
     }

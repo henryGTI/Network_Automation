@@ -74,7 +74,7 @@ async function loadDevices() {
         showLoading();
         debugLog('장비 목록 로드 시작');
         
-        const response = await fetch('/api/devices', {
+        const response = await fetch('/device/api/devices', {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
@@ -217,7 +217,13 @@ function escapeHtml(unsafe) {
 function deleteDevice(name) {
     if (!confirm(`${name} 장비를 삭제하시겠습니까?`)) return;
 
-    fetch(`/api/devices/${encodeURIComponent(name)}`, {
+    const device = devicesList.find(d => d.name === name);
+    if (!device) {
+        showError('장비를 찾을 수 없습니다.');
+        return;
+    }
+
+    fetch(`/device/api/devices/${device.id}`, {
         method: 'DELETE',
         headers: {
             'Accept': 'application/json'
@@ -349,9 +355,8 @@ function editDevice(name) {
 
     form.addEventListener('submit', function(e) {
         e.preventDefault();
-        const originalName = this.querySelector(`#${formId}-name`).value.trim();
         const updatedDevice = {
-            name: originalName,
+            name: this.querySelector(`#${formId}-name`).value.trim(),
             ip: this.querySelector(`#${formId}-ip`).value.trim(),
             vendor: normalizeVendorName(this.querySelector(`#${formId}-vendor`).value.trim()),
             model: this.querySelector(`#${formId}-model`).value.trim()
@@ -372,7 +377,7 @@ function editDevice(name) {
             return;
         }
 
-        fetch(`/api/devices/${encodeURIComponent(originalName)}`, {
+        fetch(`/device/api/devices/${device.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -500,7 +505,7 @@ function setupDeviceForm() {
             return;
         }
 
-        fetch('/api/devices', {
+        fetch('/device/api/devices', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

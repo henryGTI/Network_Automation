@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>장비 관리</h2>
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#deviceModal">
+                        장비 추가
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>장비명</th>
+                                <th>IP 주소</th>
+                                <th>벤더</th>
+                                <th>장비 유형</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deviceList">
+                            <!-- 장비 목록이 여기에 동적으로 추가됩니다 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 장비 추가/수정 모달 -->
+<div class="modal fade" id="deviceModal" tabindex="-1" role="dialog" aria-labelledby="deviceModalLabel" aria-modal="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deviceModalLabel">장비 추가</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <form id="deviceForm" role="form" aria-labelledby="deviceModalLabel">
+                    <input type="hidden" id="deviceId">
+                    <div class="mb-3">
+                        <label for="deviceName" class="form-label">장비명</label>
+                        <input type="text" class="form-control" id="deviceName" required aria-required="true">
+                    </div>
+                    <div class="mb-3">
+                        <label for="ipAddress" class="form-label">IP 주소</label>
+                        <input type="text" class="form-control" id="ipAddress" required pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" aria-required="true">
+                    </div>
+                    <div class="mb-3">
+                        <label for="vendor" class="form-label">벤더</label>
+                        <select class="form-select" id="vendor" required aria-required="true">
+                            <option value="">선택하세요</option>
+                            <option value="cisco">Cisco</option>
+                            <option value="juniper">Juniper</option>
+                            <option value="arista">Arista</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="deviceType" class="form-label">장비 유형</label>
+                        <select class="form-select" id="deviceType" required aria-required="true">
+                            <option value="">선택하세요</option>
+                            <option value="router">라우터</option>
+                            <option value="switch">스위치</option>
+                            <option value="firewall">방화벽</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="username" class="form-label">사용자명</label>
+                        <input type="text" class="form-control" id="username" autocomplete="username" required aria-required="true">
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">비밀번호</label>
+                        <input type="password" class="form-control" id="password" autocomplete="current-password" required aria-required="true">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary" id="saveDeviceBtn">저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 전역 변수
+let deviceModal;
+let currentMode = 'add'; // 'add' 또는 'edit'
+
+// 초기화 함수
+function initializeDeviceManagement() {
+    console.log('장비 관리 초기화 시작');
+    
+    // 모달 초기화
+    deviceModal = new bootstrap.Modal(document.getElementById('deviceModal'));
+    
+    // 이벤트 리스너 등록
+    document.getElementById('saveDeviceBtn').addEventListener('click', handleDeviceSave);
+    document.getElementById('vendor').addEventListener('change', handleVendorChange);
+    document.getElementById('deviceType').addEventListener('change', handleDeviceTypeChange);
+    
+    // 장비 목록 로드
+    loadDevices();
+    
+    console.log('장비 관리 초기화 완료');
+}
+
+// 장비 목록 로드
+async function loadDevices() {
+    try {
+        console.log('장비 목록 로드 시작');
+        const response = await fetch('/device/api/devices');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('장비 목록 데이터:', data);
+        
+        updateDeviceTable(data);
+    } catch (error) {
+        console.error('장비 목록 로드 실패:', error);
+        showToast('장비 목록을 불러오는데 실패했습니다.', 'error');
+    }
+}
+
+// 장비 테이블 업데이트
+function updateDeviceTable(devices) {
+    console.log('장비 테이블 업데이트 시작');
+    const deviceList = document.getElementById('deviceList');
+    deviceList.innerHTML = '';
+    
+    if (Array.isArray(devices)) {
+        devices.forEach(device => {
+            deviceList.innerHTML += `
+                <tr>
+                    <td>${device.name}</td>
+                    <td>${device.ip_address}</td>
+                    <td>${device.vendor}</td>
+                    <td>${device.device_type}</td>
+                    <td><span class="badge ${getStatusBadgeClass(device.status)}">${device.status}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editDevice(${device.id})">수정</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteDevice(${device.id})">삭제</button>
+                    </td>
+                </tr>
+            `;
+        });
+    } else {
+        console.error('잘못된 데이터 형식:', devices);
+        showToast('장비 목록 데이터 형식이 올바르지 않습니다.', 'error');
+    }
+}
+
+// 상태 뱃지 클래스 반환
+function getStatusBadgeClass(status) {
+    switch (status) {
+        case 'online':
+            return 'bg-success';
+        case 'offline':
+            return 'bg-danger';
+        default:
+            return 'bg-secondary';
+    }
+}
+
+// 장비 저장 처리
+async function handleDeviceSave() {
+    try {
+        console.log('장비 저장 시작');
+        const formData = getFormData();
+        
+        if (!validateFormData(formData)) {
+            return;
+        }
+        
+        const url = currentMode === 'add' ? '/device/api/devices' : `/device/api/devices/${formData.id}`;
+        const method = currentMode === 'add' ? 'POST' : 'PUT';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('장비 저장 응답:', data);
+        
+        if (data.status === 'success') {
+            showToast(data.message, 'success');
+            deviceModal.hide();
+            resetForm();
+            loadDevices();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('장비 저장 실패:', error);
+        showToast('장비 저장에 실패했습니다.', 'error');
+    }
+}
+
+// 폼 데이터 가져오기
+function getFormData() {
+    return {
+        id: document.getElementById('deviceId').value,
+        name: document.getElementById('deviceName').value,
+        ip_address: document.getElementById('ipAddress').value,
+        vendor: document.getElementById('vendor').value,
+        device_type: document.getElementById('deviceType').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+    };
+}
+
+// 폼 데이터 검증
+function validateFormData(data) {
+    if (!data.name) {
+        showToast('장비명을 입력해주세요.', 'error');
+        return false;
+    }
+    if (!data.ip_address) {
+        showToast('IP 주소를 입력해주세요.', 'error');
+        return false;
+    }
+    if (!data.vendor) {
+        showToast('벤더를 선택해주세요.', 'error');
+        return false;
+    }
+    if (!data.device_type) {
+        showToast('장비 유형을 선택해주세요.', 'error');
+        return false;
+    }
+    if (!data.username) {
+        showToast('사용자명을 입력해주세요.', 'error');
+        return false;
+    }
+    if (!data.password) {
+        showToast('비밀번호를 입력해주세요.', 'error');
+        return false;
+    }
+    return true;
+}
+
+// 장비 수정
+async function editDevice(deviceId) {
+    try {
+        console.log('장비 수정 시작:', deviceId);
+        currentMode = 'edit';
+        
+        const response = await fetch(`/device/api/devices/${deviceId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const device = await response.json();
+        console.log('장비 데이터:', device);
+        
+        populateForm(device);
+        document.getElementById('deviceModalLabel').textContent = '장비 수정';
+        deviceModal.show();
+    } catch (error) {
+        console.error('장비 수정 실패:', error);
+        showToast('장비 정보를 불러오는데 실패했습니다.', 'error');
+    }
+}
+
+// 장비 삭제
+async function deleteDevice(deviceId) {
+    if (!confirm('정말로 이 장비를 삭제하시겠습니까?')) {
+        return;
+    }
+    
+    try {
+        console.log('장비 삭제 시작:', deviceId);
+        const response = await fetch(`/device/api/devices/${deviceId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('장비 삭제 응답:', data);
+        
+        if (data.status === 'success') {
+            showToast(data.message, 'success');
+            loadDevices();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('장비 삭제 실패:', error);
+        showToast('장비 삭제에 실패했습니다.', 'error');
+    }
+}
+
+// 폼 데이터 채우기
+function populateForm(device) {
+    document.getElementById('deviceId').value = device.id;
+    document.getElementById('deviceName').value = device.name;
+    document.getElementById('ipAddress').value = device.ip_address;
+    document.getElementById('vendor').value = device.vendor;
+    document.getElementById('deviceType').value = device.device_type;
+    document.getElementById('username').value = device.username;
+    document.getElementById('password').value = device.password;
+}
+
+// 폼 초기화
+function resetForm() {
+    document.getElementById('deviceForm').reset();
+    document.getElementById('deviceId').value = '';
+    currentMode = 'add';
+    document.getElementById('deviceModalLabel').textContent = '장비 추가';
+}
+
+// 벤더 변경 처리
+function handleVendorChange(event) {
+    console.log('벤더 변경:', event.target.value);
+    updateDeviceTypeOptions(event.target.value);
+}
+
+// 장비 유형 변경 처리
+function handleDeviceTypeChange(event) {
+    console.log('장비 유형 변경:', event.target.value);
+}
+
+// 장비 유형 옵션 업데이트
+function updateDeviceTypeOptions(vendor) {
+    const deviceTypeSelect = document.getElementById('deviceType');
+    deviceTypeSelect.innerHTML = '<option value="">선택하세요</option>';
+    
+    const options = {
+        cisco: ['router', 'switch', 'firewall'],
+        juniper: ['router', 'switch', 'firewall'],
+        arista: ['switch']
+    };
+    
+    if (options[vendor]) {
+        options[vendor].forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = getDeviceTypeLabel(type);
+            deviceTypeSelect.appendChild(option);
+        });
+    }
+}
+
+// 장비 유형 레이블 반환
+function getDeviceTypeLabel(type) {
+    const labels = {
+        router: '라우터',
+        switch: '스위치',
+        firewall: '방화벽'
+    };
+    return labels[type] || type;
+}
+
+// 토스트 메시지 표시
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const toastTitle = document.getElementById('toast-title');
+    const toastMessage = document.getElementById('toast-message');
+    
+    toastTitle.textContent = type === 'success' ? '성공' : '오류';
+    toastMessage.textContent = message;
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+}
+
+// 페이지 로드 시 초기화
+document.addEventListener('DOMContentLoaded', initializeDeviceManagement);
+</script>
+{% endblock %} 
