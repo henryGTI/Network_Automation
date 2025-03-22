@@ -237,6 +237,14 @@ class ConfigService:
                 'NTP 설정': 'ntp_config'
             }
             
+            # 상세 작업과 템플릿 키 간의 매핑 추가
+            subtask_to_template = {
+                '포트 설정': {
+                    '액세스 모드 설정': 'vlan_interface',
+                    '트렁크 모드 설정': 'vlan_interface'
+                }
+            }
+            
             # 지원하는 벤더인지 확인
             if vendor.lower() not in templates:
                 raise ValueError(f"지원하지 않는 벤더입니다: {vendor}")
@@ -258,6 +266,11 @@ class ConfigService:
                 # 작업 유형에 해당하는 템플릿 키 찾기
                 template_key = task_type_to_template.get(task_type)
                 
+                # 상세 작업이 특별한 템플릿을 사용하는지 확인
+                subtask_templates = subtask_to_template.get(task_type, {})
+                if subtask in subtask_templates:
+                    template_key = subtask_templates[subtask]
+                
                 if template_key and template_key in vendor_templates:
                     template_data = vendor_templates[template_key]
                     script_lines.append(f"! {task_type} - {subtask}")
@@ -265,12 +278,51 @@ class ConfigService:
                     # 템플릿에 파라미터 적용
                     for cmd_template in template_data['template']:
                         try:
-                            cmd = cmd_template.format(**task_params)
-                            script_lines.append(cmd)
-                        except KeyError as e:
-                            # 필수 파라미터가 없는 경우 경고
-                            logger.warning(f"필수 파라미터 누락: {e}")
-                            script_lines.append(f"! 주의: {e} 파라미터가 필요합니다")
+                            # 템플릿 문자열에서 필요한 파라미터 추출
+                            required_params = []
+                            import re
+                            pattern = r'{(\w+)}'
+                            matches = re.findall(pattern, cmd_template)
+                            for match in matches:
+                                required_params.append(match)
+                            
+                            # 필요한 파라미터가 없으면 기본값 설정 또는 경고 메시지 추가
+                            param_values = {}
+                            for param in required_params:
+                                if param in task_params:
+                                    param_values[param] = task_params[param]
+                                else:
+                                    # 기본값 설정 (특정 파라미터에 따라 다르게 처리)
+                                    if param == 'interface_status':
+                                        param_values[param] = 'no shutdown'
+                                        logger.warning(f"'{param}' 파라미터 기본값 사용: 'no shutdown'")
+                                    elif param == 'mode':
+                                        if '액세스' in subtask:
+                                            param_values[param] = 'access'
+                                            logger.warning(f"'{param}' 파라미터 기본값 사용: 'access'")
+                                        elif '트렁크' in subtask:
+                                            param_values[param] = 'trunk'
+                                            logger.warning(f"'{param}' 파라미터 기본값 사용: 'trunk'")
+                                    elif param == 'interface_desc':
+                                        param_values[param] = f'Configured by Network Automation Tool'
+                                        logger.warning(f"'{param}' 파라미터 기본값 사용: 'Configured by Network Automation Tool'")
+                                    else:
+                                        script_lines.append(f"! 주의: '{param}' 파라미터가 필요합니다")
+                                        logger.warning(f"필수 파라미터 누락: '{param}'")
+                            
+                            # 모든 필수 파라미터가 있으면 명령어 생성
+                            if all(param in param_values for param in required_params):
+                                cmd = cmd_template.format(**param_values)
+                                script_lines.append(cmd)
+                            else:
+                                # 누락된 파라미터가 있는 경우
+                                missing_params = [p for p in required_params if p not in param_values]
+                                for p in missing_params:
+                                    script_lines.append(f"! 주의: '{p}' 파라미터가 필요합니다")
+                        except Exception as e:
+                            # 기타 오류 처리
+                            logger.warning(f"스크립트 생성 중 오류: {e}")
+                            script_lines.append(f"! 오류: {str(e)}")
                     
                     script_lines.append("!")
                 else:
