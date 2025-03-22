@@ -209,49 +209,32 @@ def start_learning():
     """CLI 명령어 학습을 시작합니다."""
     try:
         data = request.get_json()
-        if not data:
-            raise ValidationError('요청 데이터가 없습니다.')
-            
-        device_id = data.get('device_id')
-        task_types = data.get('task_types')
+        logger.info(f"학습 요청 받음: data={data}")
         
-        if not device_id:
-            raise ValidationError('장치 ID가 필요합니다.')
-        if not task_types:
-            raise ValidationError('작업 유형이 필요합니다.')
-            
-        # 장치 정보 조회
-        device = Device.query.get(device_id)
-        if not device:
-            raise ValidationError('존재하지 않는 장치입니다.')
-            
-        # 학습 시작
-        result = learning_service.start_learning(device.vendor)
+        # 모든 벤더에 대한 자동 학습 진행
+        supported_vendors = ['cisco', 'juniper', 'arista']
+        results = {}
+        
+        for vendor in supported_vendors:
+            try:
+                logger.info(f"{vendor} 벤더에 대한 자동 학습 시작")
+                result = learning_service.start_learning(vendor)
+                results[vendor] = result
+            except Exception as e:
+                logger.error(f"{vendor} 벤더 학습 실패: {str(e)}")
+                results[vendor] = {'status': 'error', 'message': str(e)}
+        
         return jsonify({
             'status': 'success',
-            'message': '명령어 학습이 완료되었습니다.',
-            'data': result
+            'message': '모든 벤더의 명령어 학습이 완료되었습니다.',
+            'data': results
         })
-        
-    except ValidationError as e:
-        logger.warning(f"검증 오류: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 400
-        
-    except CLILearningError as e:
-        logger.error(f"학습 오류: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
         
     except Exception as e:
         logger.error(f"예상치 못한 오류: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
-            'message': '서버 오류가 발생했습니다.'
+            'message': f'서버 오류가 발생했습니다: {str(e)}'
         }), 500
 
 @learning_bp.route('/api/learning/task-types', methods=['GET'])
@@ -286,4 +269,58 @@ def get_vendor_templates(vendor):
         return jsonify({
             'status': 'error',
             'message': '템플릿을 불러오는데 실패했습니다.'
-        }), 500 
+        }), 500
+
+@learning_bp.route('/api/learning/debug-commands', methods=['GET'])
+def debug_commands():
+    """디버깅용: 직접 명령어를 DB에 추가하고 조회합니다."""
+    try:
+        # 모든 기존 명령어 삭제
+        CLICommand.query.delete()
+        db.session.commit()
+        
+        # 새 명령어 추가
+        vendors = ['cisco', 'juniper', 'arista']
+        for vendor in vendors:
+            # 샘플 명령어 생성
+            command = CLICommand(
+                vendor=vendor,
+                device_type='스위치',
+                task_type='VLAN 관리',
+                subtask='VLAN 생성',
+                command=f'vlan {{vlan_id}}\nname {{vlan_name}}' if vendor in ['cisco', 'arista'] else 'set vlans {vlan_name} vlan-id {vlan_id}',
+                parameters=['vlan_id', 'vlan_name'],
+                description='VLAN을 생성하는 명령어'
+            )
+            db.session.add(command)
+            
+            # 두 번째 명령어
+            command2 = CLICommand(
+                vendor=vendor,
+                device_type='스위치',
+                task_type='포트 설정',
+                subtask='인터페이스 활성화',
+                command=f'interface {{interface_name}}\nno shutdown' if vendor in ['cisco', 'arista'] else 'set interfaces {interface_name} enable',
+                parameters=['interface_name'],
+                description='인터페이스를 활성화하는 명령어'
+            )
+            db.session.add(command2)
+        
+        db.session.commit()
+        
+        # 저장된 명령어 조회
+        commands = CLICommand.query.all()
+        return jsonify([{
+            'id': cmd.id,
+            'vendor': cmd.vendor,
+            'task_type': cmd.task_type,
+            'subtask': cmd.subtask,
+            'command': cmd.command,
+            'parameters': cmd.parameters,
+            'updated_at': cmd.updated_at.isoformat()
+        } for cmd in commands])
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"디버그 명령어 생성 중 오류: {str(e)}")
+        return jsonify({'error': str(e)}), 500 

@@ -6,22 +6,9 @@
         <h2>자동 학습</h2>
         <div class="card mb-4">
             <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label for="deviceSelect" class="form-label">장치 선택</label>
-                        <select class="form-select" id="deviceSelect" multiple>
-                            <!-- 장치 목록이 동적으로 로드됩니다 -->
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="taskTypeSelect" class="form-label">작업 유형 선택</label>
-                        <select class="form-select" id="taskTypeSelect" multiple>
-                            <!-- 작업 유형 목록이 동적으로 로드됩니다 -->
-                        </select>
-                    </div>
-                </div>
-                <div class="row mt-3">
+                <div class="row">
                     <div class="col-md-12">
+                        <p class="mb-3">벤더별 CLI 명령어를 자동으로 수집합니다. 학습은 해당 벤더사의 웹페이지나 구글링 등을 통해 이루어집니다.</p>
                         <button type="button" class="btn btn-primary" onclick="startLearning()">학습 시작</button>
                     </div>
                 </div>
@@ -68,7 +55,7 @@
 </div>
 
 <!-- 학습 진행 상태 모달 -->
-<div class="modal fade" id="learningProgressModal" tabindex="-1" role="dialog" aria-labelledby="learningProgressModalLabel" aria-modal="true">
+<div class="modal fade" id="learningProgressModal" tabindex="-1" aria-labelledby="learningProgressModalLabel" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">
@@ -105,55 +92,13 @@ function initializePage() {
     // 학습된 명령어 로드
     loadLearnedCommands();
     
-    // 장치 목록 로드
-    fetch('/api/devices')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(devices => {
-            const select = document.getElementById('deviceSelect');
-            devices.forEach(device => {
-                const option = document.createElement('option');
-                option.value = device.id;
-                option.textContent = `${device.name} (${device.vendor})`;
-                select.appendChild(option);
-            });
-        })
-        .catch(error => {
-            console.error('장치 목록 로드 실패:', error);
-            showToast('error', `장치 목록 로드 중 오류가 발생했습니다: ${error.message}`);
-        });
-    
-    // 작업 유형 목록 로드
-    fetch('/api/learning/task-types')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(taskTypes => {
-            const select = document.getElementById('taskTypeSelect');
-            taskTypes.forEach(type => {
-                const option = document.createElement('option');
-                option.value = type.id;
-                option.textContent = type.name;
-                select.appendChild(option);
-            });
-        })
-        .catch(error => {
-            console.error('작업 유형 목록 로드 실패:', error);
-            showToast('error', `작업 유형 목록 로드 중 오류가 발생했습니다: ${error.message}`);
-        });
-    
     // 모달 초기화
     const modalElement = document.getElementById('learningProgressModal');
+    
+    // Bootstrap 모달 초기화
     learningModal = new bootstrap.Modal(modalElement, {
-        keyboard: true,
-        backdrop: true
+        backdrop: 'static',
+        keyboard: false
     });
     
     // 모달이 열릴 때 포커스 저장
@@ -167,23 +112,44 @@ function initializePage() {
             lastFocusedElement.focus();
         }
     });
+    
+    // aria-hidden 문제 해결
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && 
+                mutation.attributeName === 'aria-hidden' && 
+                modalElement.getAttribute('aria-hidden') === 'true' && 
+                modalElement.contains(document.activeElement)) {
+                
+                // 포커스된 요소가 있는 경우 aria-hidden 제거
+                modalElement.removeAttribute('aria-hidden');
+            }
+        });
+    });
+    
+    // 속성 변경 감시 시작
+    observer.observe(modalElement, { attributes: true });
 }
 
 // 학습 시작
 function startLearning() {
-    const deviceSelect = document.getElementById('deviceSelect');
-    const taskTypeSelect = document.getElementById('taskTypeSelect');
-    
-    const selectedDevices = Array.from(deviceSelect.selectedOptions).map(option => option.value);
-    const selectedTaskTypes = Array.from(taskTypeSelect.selectedOptions).map(option => option.value);
-    
-    if (selectedDevices.length === 0 || selectedTaskTypes.length === 0) {
-        showToast('error', '장치와 작업 유형을 선택해주세요.');
-        return;
-    }
+    // 진행 상태 초기화
+    const progressBar = document.getElementById('learningProgress');
+    const statusDiv = document.getElementById('learningStatus');
+    progressBar.style.width = '0%';
+    progressBar.setAttribute('aria-valuenow', '0');
+    statusDiv.textContent = '학습을 시작합니다...';
     
     // 학습 진행 모달 표시
     learningModal.show();
+    
+    // 모달 닫기 버튼에 포커스 설정
+    setTimeout(() => {
+        const closeButton = document.querySelector('#learningProgressModal .btn-close');
+        if (closeButton) {
+            closeButton.focus();
+        }
+    }, 150);
     
     // 학습 시작 API 호출
     fetch('/api/learning/start', {
@@ -192,11 +158,16 @@ function startLearning() {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            device_id: selectedDevices,
-            task_types: selectedTaskTypes
+            auto_all: true,  // 모든 벤더와 작업 유형에 대한 자동 학습 요청
+            device_id: '1',  // 더미 장치 ID
+            task_types: ['1']  // 더미 작업 유형
         })
     })
     .then(response => {
+        progressBar.style.width = '50%';
+        progressBar.setAttribute('aria-valuenow', '50');
+        statusDiv.textContent = '벤더별 명령어 학습 중...';
+        
         if (!response.ok) {
             return response.json().then(data => {
                 throw new Error(data.message || `HTTP error! status: ${response.status}`);
@@ -205,14 +176,26 @@ function startLearning() {
         return response.json();
     })
     .then(data => {
-        learningModal.hide();
-        showToast('success', data.message || '명령어 학습이 완료되었습니다.');
-        loadLearnedCommands();
+        progressBar.style.width = '100%';
+        progressBar.setAttribute('aria-valuenow', '100');
+        statusDiv.textContent = '학습이 완료되었습니다!';
+        
+        setTimeout(() => {
+            learningModal.hide();
+            showToast('success', data.message || '명령어 학습이 완료되었습니다.');
+            loadLearnedCommands();
+        }, 1000);
     })
     .catch(error => {
-        learningModal.hide();
         console.error('학습 실패:', error);
-        showToast('error', `학습 중 오류가 발생했습니다: ${error.message}`);
+        statusDiv.textContent = `오류 발생: ${error.message}`;
+        progressBar.classList.remove('bg-primary');
+        progressBar.classList.add('bg-danger');
+        
+        setTimeout(() => {
+            learningModal.hide();
+            showToast('error', `학습 중 오류가 발생했습니다: ${error.message}`);
+        }, 1500);
     });
 }
 
@@ -257,23 +240,29 @@ function updateCommandsTable(commands) {
     commands.forEach(cmd => {
         const row = document.createElement('tr');
         
+        // 벤더
         const vendorCell = document.createElement('td');
         vendorCell.textContent = cmd.vendor;
         
+        // 작업 유형
         const taskTypeCell = document.createElement('td');
         taskTypeCell.textContent = cmd.task_type;
         
+        // 상세 작업
         const subtaskCell = document.createElement('td');
         subtaskCell.textContent = cmd.subtask;
         
+        // 명령어 템플릿
         const commandCell = document.createElement('td');
         const code = document.createElement('code');
         code.textContent = cmd.command;
         commandCell.appendChild(code);
         
+        // 매개변수
         const paramsCell = document.createElement('td');
         paramsCell.textContent = cmd.parameters ? cmd.parameters.join(', ') : '-';
         
+        // 마지막 학습 일시
         const dateCell = document.createElement('td');
         dateCell.textContent = new Date(cmd.updated_at).toLocaleString();
         
