@@ -7,6 +7,9 @@ let subtasks = {};
 // 이벤트 리스너 관리를 위한 Map
 const eventListenerMap = new Map();
 
+// 선택된 작업 유형과 상세 작업을 저장할 객체
+const selectedTasks = new Map();
+
 // 이벤트 리스너 등록 함수
 function addEventListenerOnce(element, eventType, handler) {
     if (!element) return;
@@ -161,23 +164,36 @@ function displayDevices() {
         return;
     }
 
-    deviceList.innerHTML = devices.map(device => `
-        <a href="#" class="list-group-item list-group-item-action" data-device-id="${device.name}">
-            <div class="d-flex w-100 justify-content-between">
-                <h6 class="mb-1">${device.name}</h6>
-                <small>${device.vendor || '벤더 미지정'}</small>
+    if (devices.length === 0) {
+        deviceList.innerHTML = `
+            <div class="list-group-item text-center text-muted py-5">
+                <i class="bi bi-inbox-fill fs-2 d-block mb-2"></i>
+                <p class="mb-0">등록된 장비가 없습니다</p>
             </div>
-            <small class="text-muted">${device.ip}</small>
+        `;
+        return;
+    }
+
+    deviceList.innerHTML = devices.map(device => `
+        <a href="#" class="list-group-item list-group-item-action" data-device-id="${device.id}">
+            <div class="d-flex w-100 justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1">${device.name}</h6>
+                    <small class="text-muted d-block">${device.ip || '아이피 미지정'}</small>
+                </div>
+                <span class="badge bg-light text-dark">${device.vendor || '벤더 미지정'}</span>
+            </div>
         </a>
     `).join('');
 
-    // 장비 선택 이벤트 리스너 등록
-    deviceList.querySelectorAll('.list-group-item').forEach(item => {
-        item.addEventListener('click', (e) => {
+    // 장비 선택 이벤트 리스너는 한 번만 등록
+    const items = deviceList.querySelectorAll('.list-group-item');
+    items.forEach(item => {
+        const deviceId = item.dataset.deviceId;
+        item.onclick = (e) => {
             e.preventDefault();
-            const deviceId = item.dataset.deviceId;
             selectDevice(deviceId);
-        });
+        };
     });
 
     console.log('장비 목록 표시 완료');
@@ -194,82 +210,47 @@ async function loadTaskTypes() {
         const taskTypes = await response.json();
         console.log('받은 작업 유형:', taskTypes);
         
-        const taskTypeSelect = document.getElementById('task-type');
-        if (!taskTypeSelect) return;
+        const container = document.getElementById('task-type-container');
+        if (!container) return;
 
-        taskTypeSelect.innerHTML = '<option value="">작업 유형을 선택하세요</option>';
-        
-        taskTypes.forEach(type => {
-            const option = document.createElement('option');
-            option.value = type;
-            option.textContent = type;
-            switch(type) {
-                case '포트 설정':
-                    option.title = '네트워크 포트 관련 설정을 수행합니다';
-                    break;
-                case 'VLAN 설정':
-                    option.title = 'VLAN 생성 및 설정을 수행합니다';
-                    break;
-            }
-            taskTypeSelect.appendChild(option);
+        container.innerHTML = taskTypes.map(type => `
+            <div class="form-check mb-2">
+                <input class="form-check-input task-type-checkbox" type="checkbox" 
+                       id="task-type-${type}" value="${type}">
+                <label class="form-check-label" for="task-type-${type}">
+                    ${type}
+                </label>
+            </div>
+        `).join('');
+
+        // 작업 유형 체크박스 이벤트 리스너 등록
+        document.querySelectorAll('.task-type-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', handleTaskTypeChange);
         });
-
-        // 이벤트 리스너 등록
-        const key = 'taskType-change';
-        if (!eventListenerMap.has(key)) {
-            const handler = async (e) => {
-                const selectedType = e.target.value;
-                console.log('선택된 작업 유형:', selectedType);
-                
-                const subtaskSelect = document.getElementById('subtask');
-                if (!subtaskSelect) return;
-
-                if (selectedType) {
-                    await loadSubtasks(selectedType);
-                } else {
-                    subtaskSelect.innerHTML = '<option value="">상세 작업을 선택하세요</option>';
-                    subtaskSelect.disabled = true;
-                    document.getElementById('parameters-container').innerHTML = '';
-                }
-            };
-            taskTypeSelect.addEventListener('change', handler);
-            eventListenerMap.set(key, handler);
-        }
     } catch (error) {
         console.error('작업 유형을 불러오는 중 오류 발생:', error);
         showToast('작업 유형을 불러오는데 실패했습니다', 'error');
     }
 }
 
-// 작업 유형 목록 표시
-function displayTaskTypes() {
-    const taskTypeSelect = document.getElementById('task-type');
-    taskTypeSelect.innerHTML = '<option value="">작업 유형을 선택하세요</option>' +
-        taskTypes.map(type => `
-            <option value="${type}">${getTaskTypeLabel(type)}</option>
-        `).join('');
+// 작업 유형 선택 변경 처리
+async function handleTaskTypeChange(e) {
+    const taskType = e.target.value;
+    const isChecked = e.target.checked;
+    
+    if (isChecked) {
+        // 작업 유형이 선택되면 해당 상세 작업 목록 로드
+        await loadSubtasks(taskType);
+    } else {
+        // 작업 유형이 해제되면 해당 상세 작업 제거
+        selectedTasks.delete(taskType);
+        updateSubtaskContainer();
+    }
+    
+    updateGenerateScriptButton();
 }
 
-// 작업 유형 레이블 생성
-function getTaskTypeLabel(type) {
-    const labels = {
-        'vlan': 'VLAN 설정',
-        'port': '포트 설정',
-        'routing': '라우팅 설정',
-        'security': '보안 설정',
-        'stp_lacp': 'STP/LACP 설정',
-        'qos': 'QoS 설정',
-        'monitoring': '모니터링',
-        'status': '상태 확인',
-        'logging': '로깅',
-        'backup': '백업/복구',
-        'snmp': 'SNMP 설정',
-        'automation': '자동화'
-    };
-    return labels[type] || type;
-}
-
-// 하위 작업 목록 로드
+// 상세 작업 목록 로드
 async function loadSubtasks(taskType) {
     try {
         console.log('상세 작업 로딩 시작:', taskType);
@@ -280,129 +261,74 @@ async function loadSubtasks(taskType) {
         const subtasks = await response.json();
         console.log('받은 상세 작업:', subtasks);
         
-        const subtaskSelect = document.getElementById('subtask');
-        if (!subtaskSelect) return;
-
-        subtaskSelect.innerHTML = '<option value="">상세 작업을 선택하세요</option>';
-        subtaskSelect.disabled = false;
-        
-        subtasks.forEach(subtask => {
-            const option = document.createElement('option');
-            option.value = subtask;
-            option.textContent = subtask;
-            switch(subtask) {
-                case '포트 상태 설정':
-                    option.title = '포트의 활성화/비활성화 상태를 설정합니다';
-                    break;
-                case 'VLAN 생성':
-                    option.title = '새로운 VLAN을 생성하고 설정합니다';
-                    break;
-            }
-            subtaskSelect.appendChild(option);
+        // 선택된 작업 유형의 상세 작업 목록 저장
+        selectedTasks.set(taskType, {
+            subtasks: subtasks,
+            selected: new Set()
         });
-
-        // 이벤트 리스너 등록
-        const key = 'subtask-change';
-        if (!eventListenerMap.has(key)) {
-            const handler = async (e) => {
-                const selectedSubtask = e.target.value;
-                console.log('선택된 상세 작업:', selectedSubtask);
-                
-                if (selectedSubtask) {
-                    await loadParameters(taskType, selectedSubtask);
-                } else {
-                    document.getElementById('parameters-container').innerHTML = '';
-                }
-            };
-            subtaskSelect.addEventListener('change', handler);
-            eventListenerMap.set(key, handler);
-        }
+        
+        updateSubtaskContainer();
     } catch (error) {
         console.error('상세 작업을 불러오는 중 오류 발생:', error);
         showToast('상세 작업을 불러오는데 실패했습니다', 'error');
     }
 }
 
-// 하위 작업 목록 표시
-function displaySubtasks(taskType) {
-    const subtaskSelect = document.getElementById('subtask');
-    subtaskSelect.disabled = false;  // 하위 작업 선택 활성화
-    subtaskSelect.innerHTML = '<option value="">상세 작업을 선택하세요</option>' +
-        subtasks[taskType].map(subtask => `
-            <option value="${subtask}">${getSubtaskLabel(taskType, subtask)}</option>
-        `).join('');
+// 상세 작업 컨테이너 업데이트
+function updateSubtaskContainer() {
+    const container = document.getElementById('subtask-container');
+    if (!container) return;
+
+    let html = '';
+    for (const [taskType, data] of selectedTasks.entries()) {
+        html += `
+            <div class="mb-3">
+                <h6>${taskType}</h6>
+                ${data.subtasks.map(subtask => `
+                    <div class="form-check">
+                        <input class="form-check-input subtask-checkbox" type="checkbox" 
+                               id="subtask-${taskType}-${subtask}" 
+                               data-task-type="${taskType}"
+                               value="${subtask}"
+                               ${data.selected.has(subtask) ? 'checked' : ''}>
+                        <label class="form-check-label" for="subtask-${taskType}-${subtask}">
+                            ${subtask}
+                        </label>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
     
-    // 파라미터 컨테이너 초기화
-    document.getElementById('parameters-container').innerHTML = '';
-    // 작업 추가 버튼 비활성화
-    document.querySelector('#task-form button[type="submit"]').disabled = true;
+    container.innerHTML = html;
+
+    // 상세 작업 체크박스 이벤트 리스너 등록
+    document.querySelectorAll('.subtask-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', handleSubtaskChange);
+    });
 }
 
-// 하위 작업 레이블 생성
-function getSubtaskLabel(taskType, subtask) {
-    const labels = {
-        'vlan': {
-            'create': 'VLAN 생성',
-            'delete': 'VLAN 삭제',
-            'interface_assign': '인터페이스 할당',
-            'trunk': '트렁크 설정'
-        },
-        'port': {
-            'mode': '포트 모드 설정',
-            'speed': '속도/듀플렉스 설정',
-            'status': '포트 상태 설정'
-        },
-        'routing': {
-            'static': '정적 라우팅',
-            'ospf': 'OSPF 설정',
-            'eigrp': 'EIGRP 설정',
-            'bgp': 'BGP 설정'
-        },
-        'security': {
-            'port_security': '포트 보안',
-            'ssh': 'SSH 설정',
-            'aaa': 'AAA 설정',
-            'acl': 'ACL 설정'
-        },
-        'stp_lacp': {
-            'stp': 'STP 설정',
-            'lacp': 'LACP 설정'
-        },
-        'qos': {
-            'policy': '정책 설정',
-            'rate_limit': '속도 제한',
-            'service_policy': '서비스 정책'
-        },
-        'monitoring': {
-            'route': '라우팅 테이블',
-            'ospf': 'OSPF 상태',
-            'bgp': 'BGP 상태'
-        },
-        'status': {
-            'interface': '인터페이스 상태',
-            'traffic': '트래픽 상태'
-        },
-        'logging': {
-            'show': '로그 보기'
-        },
-        'backup': {
-            'backup': '설정 백업',
-            'restore': '설정 복구',
-            'tftp': 'TFTP 전송'
-        },
-        'snmp': {
-            'setup': 'SNMP 설정',
-            'discovery': '장비 탐색'
-        },
-        'automation': {
-            'deploy': '설정 배포',
-            'verify': '설정 검증'
-        }
-    };
-    return labels[taskType]?.[subtask] || subtask;
+// 상세 작업 선택 변경 처리
+async function handleSubtaskChange(e) {
+    const taskType = e.target.dataset.taskType;
+    const subtask = e.target.value;
+    const isChecked = e.target.checked;
+    
+    if (!selectedTasks.has(taskType)) return;
+    
+    const taskData = selectedTasks.get(taskType);
+    if (isChecked) {
+        taskData.selected.add(subtask);
+        await loadParameters(taskType, subtask);
+    } else {
+        taskData.selected.delete(subtask);
+        removeParameters(taskType, subtask);
+    }
+    
+    updateGenerateScriptButton();
 }
 
-// 파라미터 정보 로드
+// 파라미터 로드
 async function loadParameters(taskType, subtask) {
     try {
         console.log('파라미터 로딩 시작:', taskType, subtask);
@@ -416,52 +342,89 @@ async function loadParameters(taskType, subtask) {
         const container = document.getElementById('parameters-container');
         if (!container) return;
 
-        container.innerHTML = '';
-
-        parameters.forEach(param => {
-            const div = document.createElement('div');
-            div.className = 'form-group mb-3';
-            
-            const label = document.createElement('label');
-            label.textContent = param.name;
-            if (param.required) {
-                label.innerHTML += ' <span class="text-danger">*</span>';
-            }
-            
-            let input;
-            if (param.type === 'select') {
-                input = document.createElement('select');
-                input.className = 'form-control';
-                param.options.forEach(option => {
-                    const opt = document.createElement('option');
-                    opt.value = option;
-                    opt.textContent = option;
-                    input.appendChild(opt);
-                });
-            } else {
-                input = document.createElement('input');
-                input.type = param.type || 'text';
-                input.className = 'form-control';
+        const paramSection = document.createElement('div');
+        paramSection.id = `params-${taskType}-${subtask}`;
+        paramSection.className = 'mb-4 border p-3 rounded bg-light';
+        
+        paramSection.innerHTML = `
+            <h6 class="border-bottom pb-2 mb-3">${taskType} - ${subtask}</h6>
+            ${parameters.map(param => {
+                // 정규식 패턴 처리
+                let patternAttr = '';
                 if (param.pattern) {
-                    input.pattern = param.pattern;
+                    try {
+                        // 정규식 유효성 검사
+                        new RegExp(param.pattern);
+                        // 하이픈이 문자 클래스 끝에 오도록 패턴 수정
+                        const escapedPattern = param.pattern
+                            .replace(/\\/g, '\\\\')
+                            .replace(/"/g, '\\"')
+                            .replace(/\[([^\]]*)-([^\]]*)\]/g, '[$1\\-$2]');
+                        patternAttr = `pattern="${escapedPattern}"`;
+                    } catch (e) {
+                        console.warn('잘못된 정규식 패턴:', param.pattern);
+                        patternAttr = '';
+                    }
                 }
-                if (param.placeholder) {
-                    input.placeholder = param.placeholder;
-                }
-            }
-            
-            input.id = `param-${param.name}`;
-            input.name = param.name;
-            input.required = param.required;
-            
-            const helpText = document.createElement('small');
-            helpText.className = 'form-text text-muted';
-            helpText.textContent = param.description || '';
 
-            div.appendChild(label);
-            div.appendChild(input);
-            div.appendChild(helpText);
-            container.appendChild(div);
+                return `
+                    <div class="mb-3">
+                        <label for="param-${taskType}-${subtask}-${param.name}" class="form-label">
+                            ${param.name}${param.required ? ' <span class="text-danger">*</span>' : ''}
+                        </label>
+                        ${param.type === 'select' ? `
+                            <select class="form-select" 
+                                    id="param-${taskType}-${subtask}-${param.name}"
+                                    name="${param.name}"
+                                    ${param.required ? 'required' : ''}>
+                                <option value="">선택하세요</option>
+                                ${param.options.map(opt => `
+                                    <option value="${opt}">${opt}</option>
+                                `).join('')}
+                            </select>
+                        ` : `
+                            <input type="${param.type || 'text'}"
+                                   class="form-control"
+                                   id="param-${taskType}-${subtask}-${param.name}"
+                                   name="${param.name}"
+                                   placeholder="${param.placeholder || ''}"
+                                   ${patternAttr}
+                                   ${param.required ? 'required' : ''}>
+                        `}
+                        ${param.description ? `
+                            <div class="form-text">
+                                ${param.description}
+                                ${patternAttr ? `<br><small class="text-muted">형식: ${param.pattern}</small>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('')}
+        `;
+        
+        container.appendChild(paramSection);
+
+        // 입력값 유효성 검사 이벤트 리스너 추가
+        const inputs = paramSection.querySelectorAll('input[pattern]');
+        inputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const pattern = new RegExp(input.pattern);
+                if (input.value && !pattern.test(input.value)) {
+                    input.classList.add('is-invalid');
+                    if (!input.nextElementSibling?.classList.contains('invalid-feedback')) {
+                        const feedback = document.createElement('div');
+                        feedback.className = 'invalid-feedback';
+                        feedback.textContent = `올바른 형식으로 입력해주세요. (${input.pattern})`;
+                        input.parentNode.insertBefore(feedback, input.nextSibling);
+                    }
+                } else {
+                    input.classList.remove('is-invalid');
+                    const feedback = input.nextElementSibling;
+                    if (feedback?.classList.contains('invalid-feedback')) {
+                        feedback.remove();
+                    }
+                }
+            });
         });
     } catch (error) {
         console.error('파라미터를 불러오는 중 오류 발생:', error);
@@ -469,65 +432,60 @@ async function loadParameters(taskType, subtask) {
     }
 }
 
-// 장비 선택
-function selectDevice(deviceId) {
-    console.log('장비 선택:', deviceId);
-    console.log('현재 장비 목록:', devices);
+// 파라미터 섹션 제거
+function removeParameters(taskType, subtask) {
+    const paramSection = document.getElementById(`params-${taskType}-${subtask}`);
+    if (paramSection) {
+        paramSection.remove();
+    }
+}
+
+// 스크립트 생성 버튼 상태 업데이트
+function updateGenerateScriptButton() {
+    const btn = document.getElementById('generateScriptBtn');
+    if (!btn) return;
     
-    const device = devices.find(d => d.id === deviceId);
-    if (!device) {
-        console.error('선택한 장비를 찾을 수 없습니다:', deviceId);
+    let hasSelectedSubtasks = false;
+    for (const [_, data] of selectedTasks.entries()) {
+        if (data.selected.size > 0) {
+            hasSelectedSubtasks = true;
+            break;
+        }
+    }
+    
+    btn.disabled = !hasSelectedSubtasks;
+}
+
+// 스크립트 미리보기 업데이트
+function updateScriptPreview(script) {
+    const preview = document.getElementById('script-preview');
+    if (!preview) return;
+
+    if (!script) {
+        preview.innerHTML = '<div class="text-muted">스크립트가 생성되지 않았습니다.</div>';
         return;
     }
 
-    selectedDevice = device;
-    console.log('선택된 장비:', selectedDevice);
-    
-    // 선택된 장비 시각적 표시
-    document.querySelectorAll('.list-group-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.deviceId === deviceId) {
-            item.classList.add('active');
-        }
-    });
-
-    // 작업 유형 선택 활성화
-    const taskTypeSelect = document.getElementById('task-type');
-    if (taskTypeSelect) {
-        taskTypeSelect.disabled = false;
-    }
-
-    // 스크립트 생성 버튼 활성화
-    const generateScriptBtn = document.getElementById('generateScriptBtn');
-    if (generateScriptBtn) {
-        generateScriptBtn.disabled = false;
-    }
-
-    // 작업 목록 로드
-    loadTasks(deviceId);
+    preview.textContent = script;
 }
 
-// 작업 목록 로드
-async function loadTasks(deviceId) {
-    try {
-        showLoading();
-        const response = await fetch(`/api/config/tasks?device_id=${deviceId}`);
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            displayTasks(data.data);
-        } else {
-            showError('작업 목록을 불러오는데 실패했습니다.');
-        }
-    } catch (error) {
-        showError('작업 목록을 불러오는데 실패했습니다.');
-        console.error('Error loading tasks:', error);
-    } finally {
-        hideLoading();
+// 스크립트 복사 기능
+function copyScript() {
+    const scriptContent = document.getElementById('scriptContent');
+    if (!scriptContent) return;
+
+    const text = scriptContent.textContent;
+    if (!text) {
+        showToast('복사할 스크립트가 없습니다', 'warning');
+        return;
     }
+
+    navigator.clipboard.writeText(text)
+        .then(() => showToast('스크립트가 클립보드에 복사되었습니다', 'success'))
+        .catch(() => showToast('스크립트 복사에 실패했습니다', 'error'));
 }
 
-// 작업 목록 표시
+// 작업 목록 표시 개선
 function displayTasks(tasks) {
     const taskList = document.getElementById('task-list');
     if (!Array.isArray(tasks)) {
@@ -535,30 +493,38 @@ function displayTasks(tasks) {
         return;
     }
 
+    if (tasks.length === 0) {
+        taskList.innerHTML = `
+            <div class="list-group-item text-center text-muted py-5">
+                <i class="bi bi-inbox-fill fs-2 mb-2"></i>
+                <p class="mb-0">등록된 작업이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
     taskList.innerHTML = tasks.map((task, index) => `
-        <div class="card mb-2">
-            <div class="card-body p-2">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="mb-0">${getTaskTypeLabel(task.task_type)}</h6>
-                        <small class="text-muted">${getSubtaskLabel(task.task_type, task.subtask)}</small>
-                    </div>
-                    <div class="d-flex align-items-center">
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="d-flex align-items-center mb-1">
                         <span class="badge bg-${getStatusBadgeColor(task.status)} me-2">
                             ${getStatusText(task.status)}
                         </span>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${task.device_id}', ${index})">
-                            삭제
-                        </button>
+                        <h6 class="mb-0">${getTaskTypeLabel(task.task_type)}</h6>
                     </div>
+                    <p class="mb-1 text-muted small">${getSubtaskLabel(task.task_type, task.subtask)}</p>
                 </div>
-                ${renderParameters(task.parameters)}
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${task.device_id}', ${index})">
+                    <i class="bi bi-trash me-1"></i>삭제
+                </button>
             </div>
+            ${renderParameters(task.parameters)}
         </div>
     `).join('');
 }
 
-// 파라미터 렌더링
+// 파라미터 렌더링 개선
 function renderParameters(parameters) {
     if (!parameters || Object.keys(parameters).length === 0) {
         return '';
@@ -566,12 +532,14 @@ function renderParameters(parameters) {
 
     return `
         <div class="mt-2 pt-2 border-top">
-            <small class="text-muted">파라미터:</small>
-            <div class="ps-2">
+            <div class="row g-2">
                 ${Object.entries(parameters).map(([key, value]) => `
-                    <small class="d-block">
-                        <span class="fw-bold">${getParameterLabel(key)}:</span> ${value}
-                    </small>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-light text-dark me-2">${getParameterLabel(key)}</span>
+                            <span class="text-break">${value}</span>
+                        </div>
+                    </div>
                 `).join('')}
             </div>
         </div>
@@ -761,7 +729,7 @@ function showToast(message, type = 'error') {
     }
 }
 
-// validateParameters 함수 수정
+// validateParameters 함수 개선
 function validateParameters() {
     const container = document.getElementById('parameters-container');
     if (!container) return true;
@@ -770,93 +738,175 @@ function validateParameters() {
     let isValid = true;
     
     inputs.forEach(input => {
-        if (input.required && !input.value) {
+        // 필수 입력 검사
+        if (input.required && !input.value.trim()) {
             isValid = false;
             input.classList.add('is-invalid');
-        } else {
-            input.classList.remove('is-invalid');
+            showInvalidFeedback(input, '이 필드는 필수입니다.');
+            return;
         }
-        
-        if (input.pattern && input.value) {
-            const regex = new RegExp(input.pattern);
-            if (!regex.test(input.value)) {
-                isValid = false;
-                input.classList.add('is-invalid');
+
+        // 패턴 검사
+        if (input.pattern && input.value.trim()) {
+            try {
+                const regex = new RegExp(input.pattern);
+                if (!regex.test(input.value.trim())) {
+                    isValid = false;
+                    input.classList.add('is-invalid');
+                    showInvalidFeedback(input, `올바른 형식으로 입력해주세요. (${input.pattern})`);
+                    return;
+                }
+            } catch (e) {
+                console.warn('잘못된 정규식 패턴:', input.pattern);
             }
         }
+
+        input.classList.remove('is-invalid');
+        removeInvalidFeedback(input);
     });
     
     return isValid;
 }
 
-// 스크립트 생성 함수
-async function generateScript() {
-    try {
-        // 선택된 장비 확인
-        if (!selectedDevice) {
-            showToast('장비를 선택해주세요', 'warning');
-            return;
-        }
-
-        // 작업 목록 수집
-        const taskList = document.querySelectorAll('.task-item');
-        if (taskList.length === 0) {
-            showToast('생성할 작업이 없습니다', 'warning');
-            return;
-        }
-
-        // 작업 데이터 수집
-        const tasks = Array.from(taskList).map(task => {
-            const taskType = task.dataset.taskType;
-            const subtask = task.dataset.subtask;
-            const parameters = {};
-            
-            // 파라미터 수집
-            task.querySelectorAll('input, select').forEach(input => {
-                parameters[input.name] = input.value;
-            });
-
-            return {
-                task_type: taskType,
-                subtask: subtask,
-                parameters: parameters
-            };
-        });
-
-        // 서버로 데이터 전송
-        const response = await fetch('/api/config/generate-script', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                device_id: selectedDevice,
-                tasks: tasks
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        
-        // 스크립트 표시
-        const scriptArea = document.getElementById('script-area');
-        if (scriptArea) {
-            scriptArea.value = result.script;
-            scriptArea.style.display = 'block';
-        }
-
-        // 실행 버튼 활성화
-        const executeBtn = document.getElementById('executeScriptBtn');
-        if (executeBtn) {
-            executeBtn.disabled = false;
-        }
-
-        showToast('스크립트가 생성되었습니다', 'success');
-    } catch (error) {
-        console.error('스크립트 생성 중 오류:', error);
-        showToast('스크립트 생성 중 오류가 발생했습니다', 'error');
+// 유효성 검사 피드백 표시
+function showInvalidFeedback(input, message) {
+    if (!input.nextElementSibling?.classList.contains('invalid-feedback')) {
+        const feedback = document.createElement('div');
+        feedback.className = 'invalid-feedback';
+        feedback.textContent = message;
+        input.parentNode.insertBefore(feedback, input.nextSibling);
     }
+}
+
+// 유효성 검사 피드백 제거
+function removeInvalidFeedback(input) {
+    const feedback = input.nextElementSibling;
+    if (feedback?.classList.contains('invalid-feedback')) {
+        feedback.remove();
+    }
+}
+
+// 작업 유형 레이블 생성
+function getTaskTypeLabel(type) {
+    const labels = {
+        'vlan': 'VLAN 설정',
+        'port': '포트 설정',
+        'routing': '라우팅 설정',
+        'security': '보안 설정',
+        'stp_lacp': 'STP/LACP 설정',
+        'qos': 'QoS 설정',
+        'monitoring': '모니터링',
+        'status': '상태 확인',
+        'logging': '로깅',
+        'backup': '백업/복구',
+        'snmp': 'SNMP 설정',
+        'automation': '자동화'
+    };
+    return labels[type] || type;
+}
+
+// 하위 작업 레이블 생성
+function getSubtaskLabel(taskType, subtask) {
+    const labels = {
+        'vlan': {
+            'create': 'VLAN 생성',
+            'delete': 'VLAN 삭제',
+            'interface_assign': '인터페이스 할당',
+            'trunk': '트렁크 설정'
+        },
+        'port': {
+            'mode': '포트 모드 설정',
+            'speed': '속도/듀플렉스 설정',
+            'status': '포트 상태 설정'
+        },
+        'routing': {
+            'static': '정적 라우팅',
+            'ospf': 'OSPF 설정',
+            'eigrp': 'EIGRP 설정',
+            'bgp': 'BGP 설정'
+        },
+        'security': {
+            'port_security': '포트 보안',
+            'ssh': 'SSH 설정',
+            'aaa': 'AAA 설정',
+            'acl': 'ACL 설정'
+        },
+        'stp_lacp': {
+            'stp': 'STP 설정',
+            'lacp': 'LACP 설정'
+        },
+        'qos': {
+            'policy': '정책 설정',
+            'rate_limit': '속도 제한',
+            'service_policy': '서비스 정책'
+        },
+        'monitoring': {
+            'route': '라우팅 테이블',
+            'ospf': 'OSPF 상태',
+            'bgp': 'BGP 상태'
+        },
+        'status': {
+            'interface': '인터페이스 상태',
+            'traffic': '트래픽 상태'
+        },
+        'logging': {
+            'show': '로그 보기'
+        },
+        'backup': {
+            'backup': '설정 백업',
+            'restore': '설정 복구',
+            'tftp': 'TFTP 전송'
+        },
+        'snmp': {
+            'setup': 'SNMP 설정',
+            'discovery': '장비 탐색'
+        },
+        'automation': {
+            'deploy': '설정 배포',
+            'verify': '설정 검증'
+        }
+    };
+    return labels[taskType]?.[subtask] || subtask;
+}
+
+// 장비 선택
+function selectDevice(deviceId) {
+    console.log('장비 선택:', deviceId);
+    
+    if (!deviceId) {
+        console.error('장비 ID가 제공되지 않았습니다');
+        return;
+    }
+
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) {
+        console.error('선택한 장비를 찾을 수 없습니다:', deviceId);
+        showToast('선택한 장비를 찾을 수 없습니다', 'error');
+        return;
+    }
+
+    selectedDevice = device;
+    console.log('선택된 장비:', selectedDevice);
+
+    // UI 업데이트
+    updateDeviceSelection(deviceId);
+    
+    // 작업 유형 선택 활성화
+    const taskTypeContainer = document.getElementById('task-type-container');
+    if (taskTypeContainer) {
+        const checkboxes = taskTypeContainer.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => checkbox.disabled = false);
+    }
+}
+
+// 장비 선택 UI 업데이트
+function updateDeviceSelection(deviceId) {
+    const deviceItems = document.querySelectorAll('#device-list .list-group-item');
+    deviceItems.forEach(item => {
+        if (item.dataset.deviceId === deviceId) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
 }

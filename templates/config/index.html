@@ -8,7 +8,7 @@
         <!-- 장비 목록 -->
         <div class="col-md-3">
             <div class="card">
-                <div class="card-header">
+                <div class="card-header bg-light">
                     <h5 class="card-title mb-0">장비 목록</h5>
                 </div>
                 <div class="card-body p-0">
@@ -20,63 +20,71 @@
         </div>
 
         <!-- 작업 설정 -->
-        <div class="col-md-5">
-            <div class="card mb-4">
-                <div class="card-header">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-light">
                     <h5 class="card-title mb-0">작업 설정</h5>
                 </div>
                 <div class="card-body">
                     <form id="task-form">
-                        <div class="mb-3">
-                            <label for="task-type" class="form-label">작업 유형</label>
-                            <select class="form-select" id="task-type" required>
-                                <option value="">작업 유형을 선택하세요</option>
-                            </select>
-                            <div class="form-text">작업의 대분류를 선택합니다</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="subtask" class="form-label">상세 작업</label>
-                            <select class="form-select" id="subtask" required disabled>
-                                <option value="">상세 작업을 선택하세요</option>
-                            </select>
-                            <div class="form-text">선택한 작업 유형에 해당하는 세부 작업을 선택합니다</div>
+                        <!-- 작업 유형 선택 -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">작업 유형</label>
+                            <div id="task-type-container" class="border p-3 rounded bg-light">
+                                <!-- 작업 유형 체크박스가 여기에 동적으로 추가됩니다 -->
+                            </div>
                         </div>
 
-                        <div id="parameters-container">
-                            <!-- 파라미터 입력 필드가 여기에 동적으로 추가됩니다 -->
+                        <!-- 상세 작업 선택 -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">상세 작업</label>
+                            <div id="subtask-container" class="border p-3 rounded bg-light">
+                                <!-- 선택된 작업 유형에 따른 상세 작업이 여기에 동적으로 추가됩니다 -->
+                            </div>
                         </div>
 
-                        <button type="button" id="addTaskBtn" class="btn btn-primary">
-                            작업 추가
-                        </button>
+                        <!-- 파라미터 입력 -->
+                        <div id="parameters-container" class="border p-3 rounded bg-light mb-4">
+                            <!-- 선택된 상세 작업에 따른 파라미터가 여기에 동적으로 추가됩니다 -->
+                        </div>
+
+                        <!-- 작업 버튼 -->
+                        <div class="text-end">
+                            <button type="button" id="generateScriptBtn" class="btn btn-primary" disabled>
+                                <i class="bi bi-code-square me-1"></i>스크립트 생성
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
 
             <!-- 작업 목록 -->
             <div class="card mt-3">
-                <div class="card-header">
+                <div class="card-header bg-light">
                     <h5 class="card-title mb-0">작업 목록</h5>
                 </div>
-                <div class="card-body">
-                    <div id="task-list">
+                <div class="card-body p-0">
+                    <div id="task-list" class="list-group list-group-flush">
                         <!-- 작업 목록이 여기에 동적으로 로드됩니다 -->
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 스크립트 생성 및 실행 -->
-        <div class="col-md-4">
+        <!-- 스크립트 미리보기 -->
+        <div class="col-md-3">
             <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">스크립트 생성</h5>
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">스크립트 미리보기</h5>
                 </div>
                 <div class="card-body">
-                    <button id="generateScriptBtn" class="btn btn-primary mb-3" disabled>스크립트 생성</button>
-                    <textarea id="scriptArea" class="form-control mb-3" rows="10" readonly></textarea>
-                    <button id="executeScriptBtn" class="btn btn-success" disabled>스크립트 실행</button>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        작업을 선택하고 스크립트를 생성하면 여기에 표시됩니다.
+                    </div>
+                    <pre id="script-preview" class="bg-light p-3 rounded" style="max-height: 500px; overflow-y: auto;">
+                        <!-- 생성된 스크립트가 여기에 표시됩니다 -->
+                    </pre>
                 </div>
             </div>
         </div>
@@ -87,6 +95,7 @@
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
     <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="toast-header">
+            <i class="bi bi-info-circle me-2"></i>
             <strong class="me-auto" id="toast-title">알림</strong>
             <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
@@ -98,6 +107,42 @@
 <div id="loading" class="position-fixed top-50 start-50 translate-middle" style="display: none;">
     <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+
+<!-- 스크립트 생성 모달 -->
+<div class="modal fade" id="scriptModal" tabindex="-1" aria-labelledby="scriptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scriptModalLabel">
+                    <i class="bi bi-code-square me-2"></i>생성된 스크립트
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0 fw-bold">스크립트 내용</label>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyScript()">
+                            <i class="bi bi-clipboard me-1"></i>복사
+                        </button>
+                    </div>
+                    <pre id="scriptContent" class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>닫기
+                </button>
+                <button type="button" class="btn btn-primary" id="saveScriptBtn">
+                    <i class="bi bi-save me-1"></i>저장
+                </button>
+                <button type="button" class="btn btn-success" id="executeScriptBtn">
+                    <i class="bi bi-play-circle me-1"></i>실행
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
