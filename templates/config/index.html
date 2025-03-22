@@ -1,39 +1,106 @@
 ﻿{% extends "base.html" %}
 
+{% block title %}설정 작업{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <h2>설정 작업</h2>
-    
-    <div class="task-type-group">
-        <h4>VLAN 관리</h4>
-        <div class="subtasks">
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" id="vlanCreate" value="vlan-create">
-                <label class="form-check-label" for="vlanCreate">VLAN 생성</label>
+<div class="container-fluid">
+    <div class="row">
+        <!-- 장비 목록 -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">장비 목록</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="device-list">
+                        <!-- 장비 목록이 여기에 동적으로 로드됩니다 -->
+                    </div>
+                </div>
             </div>
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" id="vlanDelete" value="vlan-delete">
-                <label class="form-check-label" for="vlanDelete">VLAN 삭제</label>
+        </div>
+
+        <!-- 작업 설정 -->
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">작업 설정</h5>
+                </div>
+                <div class="card-body">
+                    <form id="task-form">
+                        <!-- 작업 유형 선택 -->
+                        <div class="mb-3">
+                            <label for="task-type" class="form-label">작업 유형</label>
+                            <select class="form-select" id="task-type" required>
+                                <option value="">작업 유형을 선택하세요</option>
+                            </select>
+                        </div>
+
+                        <!-- 하위 작업 선택 -->
+                        <div class="mb-3">
+                            <label for="subtask" class="form-label">상세 작업</label>
+                            <select class="form-select" id="subtask" required>
+                                <option value="">상세 작업을 선택하세요</option>
+                            </select>
+                        </div>
+
+                        <!-- 파라미터 입력 -->
+                        <div id="parameters-container">
+                            <!-- 파라미터 입력 필드가 여기에 동적으로 로드됩니다 -->
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" disabled>작업 추가</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 작업 목록 -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">작업 목록</h5>
+                </div>
+                <div class="card-body">
+                    <div id="task-list">
+                        <!-- 작업 목록이 여기에 동적으로 로드됩니다 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 스크립트 생성 및 실행 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">스크립트 생성</h5>
+                </div>
+                <div class="card-body">
+                    <button id="generateScriptBtn" class="btn btn-primary mb-3" disabled>스크립트 생성</button>
+                    <textarea id="scriptArea" class="form-control mb-3" rows="10" readonly></textarea>
+                    <button id="executeScriptBtn" class="btn btn-success" disabled>스크립트 실행</button>
+                </div>
             </div>
         </div>
     </div>
-
-    <div class="task-type-group">
-        <h4>포트 설정</h4>
-        <div class="subtasks">
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" id="portConfig" value="port-config">
-                <label class="form-check-label" for="portConfig">포트 설정</label>
-            </div>
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" id="portStatus" value="port-status">
-                <label class="form-check-label" for="portStatus">포트 상태 확인</label>
-            </div>
-        </div>
-    </div>
-
-    <div id="configDetails" class="mt-3"></div>
-
-    <button id="generateScript" class="btn btn-primary mt-3">스크립트 생성</button>
 </div>
+
+<!-- 알림 메시지 -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto" id="toast-title">알림</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toast-message"></div>
+    </div>
+</div>
+
+<!-- 로딩 스피너 -->
+<div id="loading" class="position-fixed top-50 start-50 translate-middle" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/config.js') }}"></script>
 {% endblock %}

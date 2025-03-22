@@ -1,47 +1,42 @@
 # Network Automation Tool
 
-네트워크 장비 설정 자동화 도구입니다.
+네트워크 자동화 도구는 네트워크 장비의 설정과 모니터링을 자동화하는 웹 기반 도구입니다.
 
 ## 주요 기능
 
-1. 네트워크 장비 관리
-   - 장비 추가/수정/삭제
-   - 벤더/모델별 관리
-   - IP 주소 기반 장비 식별
+- 네트워크 장비 관리
+  - 장비 정보 등록 및 관리
+  - 연결 상태 모니터링
+  - 설정 백업 및 복원
 
-2. 장비 설정 관리
-   - 장비별 설정 백업
-   - 설정 이력 관리
-   - 설정 비교 및 복원
+- 설정 관리
+  - VLAN 설정
+  - 인터페이스 설정
+  - 라우팅 설정
+  - 보안 설정
+  - QoS 설정
+  - 모니터링 설정
 
-3. CLI 학습 기능
-   - 벤더별 CLI 명령어 학습
-   - 매뉴얼 기반 자동 학습
-   - 사용자 정의 명령어 추가
+- CLI 학습 기능
+  - 벤더별 CLI 명령어 자동 학습
+  - 명령어 데이터베이스 구축
+  - 학습된 명령어 조회 및 활용
 
-4. 지원 벤더
-   - Cisco
-   - Juniper
-   - HP
-   - Arista
-   - Handreamnet
-   - CoreEdge Networks
+## 지원 벤더
 
-## 시작하기
+- Cisco
+- Juniper
+- Arista
+- HP
+- 기타 벤더 추가 예정
 
-### 요구사항
-
-- Python 3.8 이상
-- Flask
-- 기타 필요한 패키지들은 requirements.txt 참고
-
-### 설치
+## 설치 방법
 
 1. 저장소 클론
 
 ```bash
-git clone https://github.com/henryGTI/Network_Automation.git
-cd Network_Automation
+git clone https://github.com/yourusername/network-automation.git
+cd network-automation
 ```
 
 1. 가상환경 생성 및 활성화
@@ -52,58 +47,49 @@ source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 ```
 
-1. 필요한 패키지 설치
+1. 의존성 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 실행
+1. 환경 변수 설정
+
+```bash
+cp .env.example .env
+# .env 파일을 편집하여 필요한 설정을 입력
+```
+
+## 실행 방법
+
+1. 서버 실행
 
 ```bash
 python run.py
 ```
 
-웹 브라우저에서 http://localhost:5000 으로 접속하여 사용할 수 있습니다.
+1. 웹 브라우저에서 접속
 
-## 주요 기능 설명
-
-### 1. 장비 관리
-- 장비 목록 조회
-- 장비 추가/수정/삭제
-- 벤더/모델별 필터링
-- IP 주소 중복 검사
-
-### 2. 설정 관리
-- 장비별 설정 백업
-- 설정 이력 관리
-- 설정 파일 비교
-- 설정 복원
-
-### 3. CLI 학습
-- 벤더별 CLI 명령어 학습
-- PDF 매뉴얼 기반 자동 학습
-- 사용자 정의 명령어 추가/수정
-- 학습된 명령어 검색
+```text
+http://localhost:5000
+```
 
 ## 프로젝트 구조
 
-```
-network_automation/
+```text
+network-automation/
 ├── app/
 │   ├── models/          # 데이터 모델
-│   ├── routes/          # 라우트 핸들러
 │   ├── services/        # 비즈니스 로직
-│   └── utils/          # 유틸리티 함수
-├── static/
-│   ├── css/            # 스타일시트
-│   └── js/             # 자바스크립트
-├── templates/          # HTML 템플릿
-├── config/            # 설정 파일
-├── tests/             # 테스트 코드
-└── run.py            # 애플리케이션 시작점
+│   ├── routes/          # API 라우트
+│   └── utils/           # 유틸리티 함수
+├── static/              # 정적 파일
+├── templates/           # HTML 템플릿
+├── config/             # 설정 파일
+├── logs/               # 로그 파일
+└── tests/              # 테스트 코드
 ```
 
 ## 라이선스
 
-이 프로젝트는 MIT 라이선스를 따릅니다.
+이 프로젝트는 MIT 라이선스를 따릅니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.

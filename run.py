@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, jsonify
+﻿from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_cors import CORS
 import logging
 from logging.handlers import RotatingFileHandler
@@ -7,6 +7,10 @@ import webbrowser
 import threading
 import time
 import sys
+from app.routes.device_routes import bp as device_bp
+from app.routes.learning_routes import bp as learning_bp
+from app.routes.config_routes import bp as config_bp
+import json
 
 # 로그 디렉토리 생성
 log_dir = 'logs'
@@ -51,6 +55,11 @@ def learning():
     logger.info('학습 페이지 요청됨')
     return render_template('learning/index.html', active_tab='learning')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                             'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 # API 에러 핸들러
 @app.errorhandler(404)
 def not_found_error(error):
@@ -63,8 +72,9 @@ def internal_error(error):
     return jsonify({'status': 'error', 'message': '서버 내부 오류가 발생했습니다.'}), 500
 
 # device_routes 블루프린트 등록
-from app.routes.device_routes import bp as device_bp
 app.register_blueprint(device_bp)
+app.register_blueprint(learning_bp)
+app.register_blueprint(config_bp)
 
 if __name__ == '__main__':
     logger.info('서버 시작 중...')

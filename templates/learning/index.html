@@ -1,26 +1,92 @@
 ﻿{% extends "base.html" %}
 
+{% block title %}CLI 학습{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
-    <h2>자동 학습</h2>
-    
-    <div class="form-group">
-        <label for="deviceSelect">디바이스 선택:</label>
-        <select class="form-control" id="deviceSelect">
-            <!-- 디바이스 목록이 여기에 동적으로 로드됩니다 -->
-        </select>
+    <h1 class="mb-4">CLI 명령어 학습</h1>
+
+    <!-- 로딩 표시 -->
+    <div id="loading" class="text-center" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">로딩중...</span>
+        </div>
     </div>
 
-    <div class="form-group mt-3">
-        <label for="commandInput">실행할 명령어:</label>
-        <input type="text" class="form-control" id="commandInput" placeholder="명령어를 입력하세요">
-    </div>
+    <div class="row mb-4">
+        <!-- 명령어 추가 폼 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">새 명령어 추가</h5>
+                </div>
+                <div class="card-body">
+                    <form id="add-command-form">
+                        <div class="mb-3">
+                            <label for="command-vendor" class="form-label">벤더</label>
+                            <select class="form-select" id="command-vendor" required>
+                                <option value="">선택하세요</option>
+                                <option value="cisco">Cisco</option>
+                                <option value="juniper">Juniper</option>
+                                <option value="hp">HP</option>
+                                <option value="arista">Arista</option>
+                                <option value="handreamnet">Handreamnet</option>
+                                <option value="coreedge">CoreEdge</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="command-text" class="form-label">명령어</label>
+                            <input type="text" class="form-control" id="command-text" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="command-description" class="form-label">설명</label>
+                            <textarea class="form-control" id="command-description" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="command-mode" class="form-label">모드</label>
+                            <input type="text" class="form-control" id="command-mode" placeholder="예: config, exec">
+                        </div>
+                        <div class="mb-3">
+                            <label for="command-parameters" class="form-label">파라미터</label>
+                            <textarea class="form-control" id="command-parameters" rows="2" placeholder="한 줄에 하나씩 입력"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="command-examples" class="form-label">예제</label>
+                            <textarea class="form-control" id="command-examples" rows="2" placeholder="한 줄에 하나씩 입력"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">추가</button>
+                    </form>
+                </div>
+            </div>
+        </div>
 
-    <button id="startLearning" class="btn btn-primary mt-3">학습 시작</button>
-
-    <div class="form-group mt-3">
-        <label for="learningResult">실행 결과:</label>
-        <textarea class="form-control" id="learningResult" rows="5" readonly></textarea>
+        <!-- 명령어 목록 -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">명령어 목록</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <select class="form-select" id="vendor-select">
+                                <option value="">벤더 선택</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="search-input" placeholder="명령어 검색...">
+                        </div>
+                    </div>
+                    <div id="commands-container">
+                        <!-- 명령어 목록이 여기에 표시됩니다 -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/learning.js') }}"></script>
 {% endblock %}
