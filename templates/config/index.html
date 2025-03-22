@@ -21,34 +21,35 @@
 
         <!-- 작업 설정 -->
         <div class="col-md-5">
-            <div class="card">
+            <div class="card mb-4">
                 <div class="card-header">
                     <h5 class="card-title mb-0">작업 설정</h5>
                 </div>
                 <div class="card-body">
                     <form id="task-form">
-                        <!-- 작업 유형 선택 -->
                         <div class="mb-3">
                             <label for="task-type" class="form-label">작업 유형</label>
                             <select class="form-select" id="task-type" required>
                                 <option value="">작업 유형을 선택하세요</option>
                             </select>
+                            <div class="form-text">작업의 대분류를 선택합니다</div>
                         </div>
-
-                        <!-- 하위 작업 선택 -->
+                        
                         <div class="mb-3">
                             <label for="subtask" class="form-label">상세 작업</label>
-                            <select class="form-select" id="subtask" required>
+                            <select class="form-select" id="subtask" required disabled>
                                 <option value="">상세 작업을 선택하세요</option>
                             </select>
+                            <div class="form-text">선택한 작업 유형에 해당하는 세부 작업을 선택합니다</div>
                         </div>
 
-                        <!-- 파라미터 입력 -->
                         <div id="parameters-container">
-                            <!-- 파라미터 입력 필드가 여기에 동적으로 로드됩니다 -->
+                            <!-- 파라미터 입력 필드가 여기에 동적으로 추가됩니다 -->
                         </div>
 
-                        <button type="submit" class="btn btn-primary" disabled>작업 추가</button>
+                        <button type="button" id="addTaskBtn" class="btn btn-primary">
+                            작업 추가
+                        </button>
                     </form>
                 </div>
             </div>

@@ -4,139 +4,144 @@ let selectedDevice = null;
 let taskTypes = {};
 let subtasks = {};
 
+// 이벤트 리스너 관리를 위한 Map
+const eventListenerMap = new Map();
+
+// 이벤트 리스너 등록 함수
+function addEventListenerOnce(element, eventType, handler) {
+    if (!element) return;
+    
+    // 기존 리스너 제거
+    const key = `${element.id}-${eventType}`;
+    const oldHandler = eventListenerMap.get(key);
+    if (oldHandler) {
+        element.removeEventListener(eventType, oldHandler);
+    }
+    
+    // 새 리스너 등록
+    element.addEventListener(eventType, handler);
+    eventListenerMap.set(key, handler);
+}
+
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
-    // 초기 상태 설정
-    document.getElementById('task-type').disabled = true;
-    document.getElementById('subtask').disabled = true;
-    document.getElementById('generateScriptBtn').disabled = true;
-    document.querySelector('#task-form button[type="submit"]').disabled = true;
-
-    // 이벤트 리스너 설정
-    setupEventListeners();
-    
-    // 데이터 로드
-    loadDevices();
-    loadTaskTypes();
+    console.log('페이지 초기화 시작');
+    initializeUI();
+    loadInitialData();
 });
 
-// 이벤트 리스너 설정
-function setupEventListeners() {
-    // 장비 선택 이벤트
-    document.getElementById('device-list').addEventListener('click', (e) => {
-        const deviceItem = e.target.closest('.list-group-item');
-        if (deviceItem) {
-            const deviceId = deviceItem.dataset.deviceId;
-            selectDevice(deviceId);
-        }
-    });
+// UI 초기화
+function initializeUI() {
+    console.log('UI 초기화');
+    const taskType = document.getElementById('task-type');
+    const subtask = document.getElementById('subtask');
+    const generateScriptBtn = document.getElementById('generateScriptBtn');
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    const deviceList = document.getElementById('device-list');
 
-    // 작업 유형 선택 이벤트
-    document.getElementById('task-type').addEventListener('change', (e) => {
-        const taskType = e.target.value;
-        if (taskType) {
-            loadSubtasks(taskType);
-        }
-    });
+    // disabled 설정
+    if (taskType) taskType.disabled = true;
+    if (subtask) subtask.disabled = true;
+    if (generateScriptBtn) generateScriptBtn.disabled = true;
+    if (addTaskBtn) addTaskBtn.disabled = true;
 
-    // 하위 작업 선택 이벤트
-    document.getElementById('subtask').addEventListener('change', (e) => {
-        const subtask = e.target.value;
-        const taskType = document.getElementById('task-type').value;
-        if (subtask && taskType) {
-            loadParameters(taskType, subtask);
-        }
-    });
-
-    // 작업 추가 폼 제출 이벤트
-    document.getElementById('task-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await addTask();
-    });
-
-    // 스크립트 생성 버튼 클릭 이벤트
-    document.getElementById('generateScriptBtn').addEventListener('click', async () => {
-        try {
-            // 선택된 장비와 작업 유형 확인
-            const selectedDevice = document.getElementById('deviceSelect').value;
-            const selectedTasks = Array.from(document.querySelectorAll('input[name="task_type"]:checked'))
-                .map(checkbox => checkbox.value);
-
-            if (!selectedDevice) {
-                showError('장비를 선택해주세요.');
-                return;
-            }
-
-            if (selectedTasks.length === 0) {
-                showError('작업 유형을 하나 이상 선택해주세요.');
-                return;
-            }
-
-            // 파라미터 수집
-            const parameters = {};
-            for (const taskType of selectedTasks) {
-                const taskParams = {};
-                const paramInputs = document.querySelectorAll(`[data-task-type="${taskType}"] input`);
-                for (const input of paramInputs) {
-                    if (input.value) {
-                        taskParams[input.name] = input.value;
-                    }
-                }
-                if (Object.keys(taskParams).length > 0) {
-                    parameters[taskType] = taskParams;
-                }
-            }
-
-            // 서버로 데이터 전송
-            const response = await fetch('/api/config/generate-script', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    device_id: selectedDevice,
-                    task_types: selectedTasks,
-                    parameters: parameters
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                // 스크립트 표시
-                const scriptArea = document.getElementById('scriptArea');
-                scriptArea.value = result.data.script;
-                
-                // 실행 버튼 활성화
-                document.getElementById('executeScriptBtn').disabled = false;
-                
-                showSuccess('스크립트가 생성되었습니다.');
+    // 작업 유형 변경 이벤트
+    if (taskType) {
+        taskType.onchange = async (e) => {
+            const selectedType = e.target.value;
+            if (selectedType) {
+                await loadSubtasks(selectedType);
             } else {
-                showError(result.message);
+                if (subtask) {
+                    subtask.innerHTML = '<option value="">상세 작업을 선택하세요</option>';
+                    subtask.disabled = true;
+                }
             }
-        } catch (error) {
-            console.error('스크립트 생성 중 오류:', error);
-            showError('스크립트 생성 중 오류가 발생했습니다.');
-        }
-    });
+        };
+    }
+
+    // 상세 작업 변경 이벤트
+    if (subtask) {
+        subtask.onchange = async (e) => {
+            const selectedSubtask = e.target.value;
+            const selectedType = taskType?.value;
+            if (selectedSubtask && selectedType) {
+                await loadParameters(selectedType, selectedSubtask);
+            }
+        };
+    }
+
+    // 장비 목록 클릭 이벤트
+    if (deviceList) {
+        deviceList.onclick = (e) => {
+            const deviceItem = e.target.closest('.list-group-item');
+            if (deviceItem) {
+                const deviceId = deviceItem.dataset.deviceId;
+                selectDevice(deviceId);
+            }
+        };
+    }
+}
+
+// 초기 데이터 로드
+async function loadInitialData() {
+    console.log('초기 데이터 로드 시작');
+    try {
+        await loadDevices();
+        await loadTaskTypes();
+    } catch (error) {
+        console.error('초기 데이터 로드 중 오류:', error);
+    }
 }
 
 // 장비 목록 로드
 async function loadDevices() {
+    console.log('장비 목록 로드 시작');
     try {
         showLoading();
         const response = await fetch('/api/devices');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
+        console.log('받은 장비 데이터 전체:', JSON.stringify(data, null, 2));
         
-        if (data.status === 'success') {
-            devices = data.data;
-            displayDevices();
+        // 데이터 구조 검증 및 변환
+        let deviceList = [];
+        if (data.devices) {
+            deviceList = data.devices;
+        } else if (data.status === 'success' && Array.isArray(data.data)) {
+            deviceList = data.data;
+        } else if (Array.isArray(data)) {
+            deviceList = data;
         } else {
-            showError('장비 목록을 불러오는데 실패했습니다.');
+            console.error('예상치 못한 데이터 구조:', data);
+            throw new Error('잘못된 장비 데이터 형식');
+        }
+
+        if (!Array.isArray(deviceList)) {
+            console.error('장비 목록이 배열이 아닙니다:', deviceList);
+            throw new Error('잘못된 장비 데이터 형식');
+        }
+
+        console.log('변환된 장비 목록:', deviceList);
+        
+        devices = deviceList.map(device => ({
+            ...device,
+            id: device.name // name을 id로 사용
+        }));
+
+        displayDevices();
+        
+        // 장비가 있으면 첫 번째 장비 자동 선택
+        if (devices.length > 0) {
+            selectDevice(devices[0].id);
+        } else {
+            console.log('장비 목록이 비어있습니다');
         }
     } catch (error) {
-        showError('장비 목록을 불러오는데 실패했습니다.');
-        console.error('Error loading devices:', error);
+        console.error('장비 목록 로드 중 오류:', error);
+        showToast('장비 목록을 불러오는데 실패했습니다', 'error');
     } finally {
         hideLoading();
     }
@@ -144,33 +149,95 @@ async function loadDevices() {
 
 // 장비 목록 표시
 function displayDevices() {
+    console.log('장비 목록 표시 시작');
     const deviceList = document.getElementById('device-list');
+    if (!deviceList) {
+        console.error('장비 목록 컨테이너를 찾을 수 없습니다');
+        return;
+    }
+
+    if (!Array.isArray(devices)) {
+        console.error('장비 데이터가 배열이 아닙니다:', devices);
+        return;
+    }
+
     deviceList.innerHTML = devices.map(device => `
-        <a href="#" class="list-group-item list-group-item-action" data-device-id="${device.id}">
+        <a href="#" class="list-group-item list-group-item-action" data-device-id="${device.name}">
             <div class="d-flex w-100 justify-content-between">
                 <h6 class="mb-1">${device.name}</h6>
-                <small>${device.vendor}</small>
+                <small>${device.vendor || '벤더 미지정'}</small>
             </div>
-            <small>${device.ip}</small>
+            <small class="text-muted">${device.ip}</small>
         </a>
     `).join('');
+
+    // 장비 선택 이벤트 리스너 등록
+    deviceList.querySelectorAll('.list-group-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const deviceId = item.dataset.deviceId;
+            selectDevice(deviceId);
+        });
+    });
+
+    console.log('장비 목록 표시 완료');
 }
 
 // 작업 유형 목록 로드
 async function loadTaskTypes() {
     try {
+        console.log('작업 유형 로딩 시작');
         const response = await fetch('/api/config/task-types');
-        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const taskTypes = await response.json();
+        console.log('받은 작업 유형:', taskTypes);
         
-        if (data.status === 'success') {
-            taskTypes = data.data;
-            displayTaskTypes();
-        } else {
-            showError('작업 유형 목록을 불러오는데 실패했습니다.');
+        const taskTypeSelect = document.getElementById('task-type');
+        if (!taskTypeSelect) return;
+
+        taskTypeSelect.innerHTML = '<option value="">작업 유형을 선택하세요</option>';
+        
+        taskTypes.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type;
+            switch(type) {
+                case '포트 설정':
+                    option.title = '네트워크 포트 관련 설정을 수행합니다';
+                    break;
+                case 'VLAN 설정':
+                    option.title = 'VLAN 생성 및 설정을 수행합니다';
+                    break;
+            }
+            taskTypeSelect.appendChild(option);
+        });
+
+        // 이벤트 리스너 등록
+        const key = 'taskType-change';
+        if (!eventListenerMap.has(key)) {
+            const handler = async (e) => {
+                const selectedType = e.target.value;
+                console.log('선택된 작업 유형:', selectedType);
+                
+                const subtaskSelect = document.getElementById('subtask');
+                if (!subtaskSelect) return;
+
+                if (selectedType) {
+                    await loadSubtasks(selectedType);
+                } else {
+                    subtaskSelect.innerHTML = '<option value="">상세 작업을 선택하세요</option>';
+                    subtaskSelect.disabled = true;
+                    document.getElementById('parameters-container').innerHTML = '';
+                }
+            };
+            taskTypeSelect.addEventListener('change', handler);
+            eventListenerMap.set(key, handler);
         }
     } catch (error) {
-        showError('작업 유형 목록을 불러오는데 실패했습니다.');
-        console.error('Error loading task types:', error);
+        console.error('작업 유형을 불러오는 중 오류 발생:', error);
+        showToast('작업 유형을 불러오는데 실패했습니다', 'error');
     }
 }
 
@@ -205,18 +272,54 @@ function getTaskTypeLabel(type) {
 // 하위 작업 목록 로드
 async function loadSubtasks(taskType) {
     try {
-        const response = await fetch(`/api/config/subtasks/${taskType}`);
-        const data = await response.json();
+        console.log('상세 작업 로딩 시작:', taskType);
+        const response = await fetch(`/api/config/subtasks/${encodeURIComponent(taskType)}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const subtasks = await response.json();
+        console.log('받은 상세 작업:', subtasks);
         
-        if (data.status === 'success') {
-            subtasks[taskType] = data.data;
-            displaySubtasks(taskType);
-        } else {
-            showError('하위 작업 목록을 불러오는데 실패했습니다.');
+        const subtaskSelect = document.getElementById('subtask');
+        if (!subtaskSelect) return;
+
+        subtaskSelect.innerHTML = '<option value="">상세 작업을 선택하세요</option>';
+        subtaskSelect.disabled = false;
+        
+        subtasks.forEach(subtask => {
+            const option = document.createElement('option');
+            option.value = subtask;
+            option.textContent = subtask;
+            switch(subtask) {
+                case '포트 상태 설정':
+                    option.title = '포트의 활성화/비활성화 상태를 설정합니다';
+                    break;
+                case 'VLAN 생성':
+                    option.title = '새로운 VLAN을 생성하고 설정합니다';
+                    break;
+            }
+            subtaskSelect.appendChild(option);
+        });
+
+        // 이벤트 리스너 등록
+        const key = 'subtask-change';
+        if (!eventListenerMap.has(key)) {
+            const handler = async (e) => {
+                const selectedSubtask = e.target.value;
+                console.log('선택된 상세 작업:', selectedSubtask);
+                
+                if (selectedSubtask) {
+                    await loadParameters(taskType, selectedSubtask);
+                } else {
+                    document.getElementById('parameters-container').innerHTML = '';
+                }
+            };
+            subtaskSelect.addEventListener('change', handler);
+            eventListenerMap.set(key, handler);
         }
     } catch (error) {
-        showError('하위 작업 목록을 불러오는데 실패했습니다.');
-        console.error('Error loading subtasks:', error);
+        console.error('상세 작업을 불러오는 중 오류 발생:', error);
+        showToast('상세 작업을 불러오는데 실패했습니다', 'error');
     }
 }
 
@@ -302,109 +405,106 @@ function getSubtaskLabel(taskType, subtask) {
 // 파라미터 정보 로드
 async function loadParameters(taskType, subtask) {
     try {
-        const response = await fetch(`/api/config/parameters/${taskType}/${subtask}`);
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            displayParameters(data.data);
-        } else {
-            showError('파라미터 정보를 불러오는데 실패했습니다.');
+        console.log('파라미터 로딩 시작:', taskType, subtask);
+        const response = await fetch(`/api/config/parameters/${encodeURIComponent(taskType)}/${encodeURIComponent(subtask)}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+        const parameters = await response.json();
+        console.log('받은 파라미터:', parameters);
+        
+        const container = document.getElementById('parameters-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        parameters.forEach(param => {
+            const div = document.createElement('div');
+            div.className = 'form-group mb-3';
+            
+            const label = document.createElement('label');
+            label.textContent = param.name;
+            if (param.required) {
+                label.innerHTML += ' <span class="text-danger">*</span>';
+            }
+            
+            let input;
+            if (param.type === 'select') {
+                input = document.createElement('select');
+                input.className = 'form-control';
+                param.options.forEach(option => {
+                    const opt = document.createElement('option');
+                    opt.value = option;
+                    opt.textContent = option;
+                    input.appendChild(opt);
+                });
+            } else {
+                input = document.createElement('input');
+                input.type = param.type || 'text';
+                input.className = 'form-control';
+                if (param.pattern) {
+                    input.pattern = param.pattern;
+                }
+                if (param.placeholder) {
+                    input.placeholder = param.placeholder;
+                }
+            }
+            
+            input.id = `param-${param.name}`;
+            input.name = param.name;
+            input.required = param.required;
+            
+            const helpText = document.createElement('small');
+            helpText.className = 'form-text text-muted';
+            helpText.textContent = param.description || '';
+
+            div.appendChild(label);
+            div.appendChild(input);
+            div.appendChild(helpText);
+            container.appendChild(div);
+        });
     } catch (error) {
-        showError('파라미터 정보를 불러오는데 실패했습니다.');
-        console.error('Error loading parameters:', error);
+        console.error('파라미터를 불러오는 중 오류 발생:', error);
+        showToast('파라미터를 불러오는데 실패했습니다', 'error');
     }
-}
-
-// 파라미터 입력 필드 표시
-function displayParameters(parameters) {
-    const container = document.getElementById('parameters-container');
-    container.innerHTML = parameters.map(param => `
-        <div class="mb-3">
-            <label for="${param}" class="form-label">${getParameterLabel(param)}</label>
-            <input type="text" class="form-control" id="${param}" name="${param}" required>
-        </div>
-    `).join('');
-    
-    // 작업 추가 버튼 활성화
-    document.querySelector('#task-form button[type="submit"]').disabled = false;
-}
-
-// 파라미터 레이블 생성
-function getParameterLabel(param) {
-    const labels = {
-        'vlan_id': 'VLAN ID',
-        'vlan_name': 'VLAN 이름',
-        'interface': '인터페이스',
-        'mode': '모드',
-        'speed': '속도',
-        'duplex': '듀플렉스',
-        'status': '상태',
-        'network': '네트워크',
-        'mask': '서브넷 마스크',
-        'next_hop': '다음 홉',
-        'process_id': '프로세스 ID',
-        'area': '영역',
-        'as_number': 'AS 번호',
-        'neighbor': '이웃',
-        'remote_as': '원격 AS',
-        'max_mac': '최대 MAC 주소 수',
-        'violation': '위반 동작',
-        'version': '버전',
-        'timeout': '타임아웃',
-        'authentication': '인증 방식',
-        'method': '방법',
-        'server_group': '서버 그룹',
-        'service': '서비스',
-        'name': '이름',
-        'type': '유형',
-        'entries': '항목',
-        'priority': '우선순위',
-        'channel_group': '채널 그룹',
-        'interfaces': '인터페이스',
-        'policy_name': '정책 이름',
-        'class_map': '클래스 맵',
-        'actions': '동작',
-        'rate': '속도',
-        'burst': '버스트',
-        'direction': '방향',
-        'filename': '파일 이름',
-        'server': '서버',
-        'community': '커뮤니티',
-        'access': '접근 권한',
-        'protocol': '프로토콜',
-        'config_file': '설정 파일',
-        'devices': '장비 목록',
-        'condition': '조건',
-        'action': '동작'
-    };
-    
-    return labels[param] || param;
 }
 
 // 장비 선택
 function selectDevice(deviceId) {
-    const device = devices.find(d => d.id === parseInt(deviceId));
-    if (device) {
-        selectedDevice = device;
-        
-        // 선택된 장비 시각적 표시
-        document.querySelectorAll('.list-group-item').forEach(item => {
-            item.classList.remove('active');
-            if (item.dataset.deviceId === deviceId) {
-                item.classList.add('active');
-            }
-        });
-
-        // 작업 추가 폼 활성화
-        document.getElementById('task-type').disabled = false;
-        
-        // 작업 목록 로드
-        loadTasks(deviceId);
-        
-        // 스크립트 생성 버튼 활성화
-        document.getElementById('generateScriptBtn').disabled = false;
+    console.log('장비 선택:', deviceId);
+    console.log('현재 장비 목록:', devices);
+    
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) {
+        console.error('선택한 장비를 찾을 수 없습니다:', deviceId);
+        return;
     }
+
+    selectedDevice = device;
+    console.log('선택된 장비:', selectedDevice);
+    
+    // 선택된 장비 시각적 표시
+    document.querySelectorAll('.list-group-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.deviceId === deviceId) {
+            item.classList.add('active');
+        }
+    });
+
+    // 작업 유형 선택 활성화
+    const taskTypeSelect = document.getElementById('task-type');
+    if (taskTypeSelect) {
+        taskTypeSelect.disabled = false;
+    }
+
+    // 스크립트 생성 버튼 활성화
+    const generateScriptBtn = document.getElementById('generateScriptBtn');
+    if (generateScriptBtn) {
+        generateScriptBtn.disabled = false;
+    }
+
+    // 작업 목록 로드
+    loadTasks(deviceId);
 }
 
 // 작업 목록 로드
@@ -643,4 +743,120 @@ function showSuccess(message) {
     
     const bsToast = new bootstrap.Toast(toast);
     bsToast.show();
+}
+
+// showToast 함수 수정
+function showToast(message, type = 'error') {
+    const toast = document.getElementById('toast');
+    const toastTitle = document.getElementById('toast-title');
+    const toastMessage = document.getElementById('toast-message');
+    
+    if (toast && toastTitle && toastMessage) {
+        toastTitle.textContent = type === 'error' ? '오류' : '알림';
+        toastMessage.textContent = message;
+        toastTitle.className = type === 'error' ? 'text-danger' : 'text-success';
+        
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
+}
+
+// validateParameters 함수 수정
+function validateParameters() {
+    const container = document.getElementById('parameters-container');
+    if (!container) return true;
+
+    const inputs = container.querySelectorAll('input, select');
+    let isValid = true;
+    
+    inputs.forEach(input => {
+        if (input.required && !input.value) {
+            isValid = false;
+            input.classList.add('is-invalid');
+        } else {
+            input.classList.remove('is-invalid');
+        }
+        
+        if (input.pattern && input.value) {
+            const regex = new RegExp(input.pattern);
+            if (!regex.test(input.value)) {
+                isValid = false;
+                input.classList.add('is-invalid');
+            }
+        }
+    });
+    
+    return isValid;
+}
+
+// 스크립트 생성 함수
+async function generateScript() {
+    try {
+        // 선택된 장비 확인
+        if (!selectedDevice) {
+            showToast('장비를 선택해주세요', 'warning');
+            return;
+        }
+
+        // 작업 목록 수집
+        const taskList = document.querySelectorAll('.task-item');
+        if (taskList.length === 0) {
+            showToast('생성할 작업이 없습니다', 'warning');
+            return;
+        }
+
+        // 작업 데이터 수집
+        const tasks = Array.from(taskList).map(task => {
+            const taskType = task.dataset.taskType;
+            const subtask = task.dataset.subtask;
+            const parameters = {};
+            
+            // 파라미터 수집
+            task.querySelectorAll('input, select').forEach(input => {
+                parameters[input.name] = input.value;
+            });
+
+            return {
+                task_type: taskType,
+                subtask: subtask,
+                parameters: parameters
+            };
+        });
+
+        // 서버로 데이터 전송
+        const response = await fetch('/api/config/generate-script', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                device_id: selectedDevice,
+                tasks: tasks
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        // 스크립트 표시
+        const scriptArea = document.getElementById('script-area');
+        if (scriptArea) {
+            scriptArea.value = result.script;
+            scriptArea.style.display = 'block';
+        }
+
+        // 실행 버튼 활성화
+        const executeBtn = document.getElementById('executeScriptBtn');
+        if (executeBtn) {
+            executeBtn.disabled = false;
+        }
+
+        showToast('스크립트가 생성되었습니다', 'success');
+    } catch (error) {
+        console.error('스크립트 생성 중 오류:', error);
+        showToast('스크립트 생성 중 오류가 발생했습니다', 'error');
+    }
 }
