@@ -21,19 +21,22 @@
 ### 설치
 
 1. 저장소 클론
+
 ```bash
-git clone https://github.com/hooniegit/Network_Automation.git
+git clone https://github.com/henryGTI/Network_Automation.git
 cd Network_Automation
 ```
 
-2. 가상환경 생성 및 활성화
+1. 가상환경 생성 및 활성화
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 ```
 
-3. 필요한 패키지 설치
+1. 필요한 패키지 설치
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -44,6 +47,6 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-실행 후 자동으로 브라우저가 열리며 http://localhost:5000 에서 접속할 수 있습니다.
+실행 후 자동으로 브라우저가 열리며 <http://localhost:5000> 에서 접속할 수 있습니다.
 
 ## 프로젝트 구조

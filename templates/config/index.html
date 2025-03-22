@@ -1,0 +1,39 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>설정 작업</h2>
+    
+    <div class="task-type-group">
+        <h4>VLAN 관리</h4>
+        <div class="subtasks">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="vlanCreate" value="vlan-create">
+                <label class="form-check-label" for="vlanCreate">VLAN 생성</label>
+            </div>
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="vlanDelete" value="vlan-delete">
+                <label class="form-check-label" for="vlanDelete">VLAN 삭제</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="task-type-group">
+        <h4>포트 설정</h4>
+        <div class="subtasks">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="portConfig" value="port-config">
+                <label class="form-check-label" for="portConfig">포트 설정</label>
+            </div>
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="portStatus" value="port-status">
+                <label class="form-check-label" for="portStatus">포트 상태 확인</label>
+            </div>
+        </div>
+    </div>
+
+    <div id="configDetails" class="mt-3"></div>
+
+    <button id="generateScript" class="btn btn-primary mt-3">스크립트 생성</button>
+</div>
+{% endblock %}

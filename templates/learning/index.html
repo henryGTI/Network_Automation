@@ -1,0 +1,26 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>자동 학습</h2>
+    
+    <div class="form-group">
+        <label for="deviceSelect">디바이스 선택:</label>
+        <select class="form-control" id="deviceSelect">
+            <!-- 디바이스 목록이 여기에 동적으로 로드됩니다 -->
+        </select>
+    </div>
+
+    <div class="form-group mt-3">
+        <label for="commandInput">실행할 명령어:</label>
+        <input type="text" class="form-control" id="commandInput" placeholder="명령어를 입력하세요">
+    </div>
+
+    <button id="startLearning" class="btn btn-primary mt-3">학습 시작</button>
+
+    <div class="form-group mt-3">
+        <label for="learningResult">실행 결과:</label>
+        <textarea class="form-control" id="learningResult" rows="5" readonly></textarea>
+    </div>
+</div>
+{% endblock %}
