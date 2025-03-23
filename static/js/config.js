@@ -543,6 +543,19 @@ async function loadParameters(taskType, subtaskName) {
         return;
     }
     
+    // 디버깅: 라우팅 설정인 경우 로그 추가
+    const isRoutingTask = safeTaskType.includes('라우팅') || 
+                         safeTaskType.includes('routing') || 
+                         safeSubtaskName.includes('라우팅') || 
+                         safeSubtaskName.includes('routing');
+    
+    if (isRoutingTask) {
+        console.log('[디버깅] 라우팅 설정 파라미터 로드 시작:', {
+            taskType: safeTaskType,
+            subtaskName: safeSubtaskName
+        });
+    }
+    
     try {
         // API 요청에서 문자열 사용
         const response = await fetch(`/api/parameters/${safeTaskType}/${safeSubtaskName}`);
@@ -555,6 +568,22 @@ async function loadParameters(taskType, subtaskName) {
         
         const data = await response.json();
         console.log('로드된 파라미터:', data);
+        
+        // 라우팅 설정인 경우 상세 로그
+        if (isRoutingTask) {
+            console.log('[디버깅] 라우팅 설정 파라미터 응답:', JSON.stringify(data, null, 2));
+            
+            if (data && Array.isArray(data.parameters)) {
+                data.parameters.forEach((param, idx) => {
+                    console.log(`[디버깅] 라우팅 파라미터 ${idx+1}:`, 
+                        param.name, 
+                        '/', 
+                        param.label, 
+                        '/', 
+                        param.type);
+                });
+            }
+        }
         
         if (!data || !Array.isArray(data.parameters)) {
             console.error('파라미터 데이터가 올바르지 않습니다', data);
@@ -579,6 +608,20 @@ async function loadParameters(taskType, subtaskName) {
 function addParameterFieldsToDevices(taskType, subtaskName, parameters) {
     console.log(`파라미터 필드 추가: ${taskType}/${subtaskName}`, parameters);
     
+    // 라우팅 설정 관련 디버깅
+    const isRoutingTask = String(taskType).includes('라우팅') || 
+                          String(taskType).includes('routing') || 
+                          String(subtaskName).includes('라우팅') || 
+                          String(subtaskName).includes('routing');
+    
+    if (isRoutingTask) {
+        console.log('[디버깅] 라우팅 파라미터 필드 추가 시작:', {
+            taskType,
+            subtaskName,
+            paramCount: parameters ? parameters.length : 0
+        });
+    }
+    
     if (!parameters || !Array.isArray(parameters)) {
         console.error('유효하지 않은 파라미터 데이터:', parameters);
         return;
@@ -601,6 +644,11 @@ function addParameterFieldsToDevices(taskType, subtaskName, parameters) {
     
     // 폼 생성
     parameters.forEach(param => {
+        // 라우팅 설정 파라미터 디버깅
+        if (isRoutingTask) {
+            console.log(`[디버깅] 라우팅 파라미터 렌더링: ${param.name} / ${param.label} / ${param.type}`);
+        }
+        
         const formGroup = document.createElement('div');
         formGroup.className = 'mb-3';
         
@@ -637,6 +685,11 @@ function addParameterFieldsToDevices(taskType, subtaskName, parameters) {
         formGroup.appendChild(label);
         formGroup.appendChild(input);
         paramContainer.appendChild(formGroup);
+        
+        // 라우팅 설정 파라미터 디버깅 - 요소 확인
+        if (isRoutingTask) {
+            console.log(`[디버깅] 라우팅 파라미터 요소 생성 완료: ${param.name}`);
+        }
     });
 }
 
@@ -644,6 +697,24 @@ function addParameterFieldsToDevices(taskType, subtaskName, parameters) {
 function createParameterForm(taskType, subtask, parameters) {
     console.log('파라미터 폼 생성 시작:', taskType, subtask);
     console.log('파라미터 데이터:', JSON.stringify(parameters));
+    
+    // 라우팅 설정 관련 디버깅
+    const isRoutingTask = String(taskType).includes('라우팅') || 
+                          String(taskType).includes('routing') || 
+                          String(subtask).includes('라우팅') || 
+                          String(subtask).includes('routing');
+    
+    if (isRoutingTask) {
+        console.log('[디버깅] 라우팅 파라미터 폼 생성 시작:', {
+            taskType,
+            subtask,
+            paramCount: parameters ? parameters.length : 0
+        });
+        
+        if (Array.isArray(parameters)) {
+            console.log('[디버깅] 라우팅 파라미터 상세:', parameters);
+        }
+    }
     
     const container = document.getElementById('parameters-container');
     if (!container) {
@@ -668,6 +739,11 @@ function createParameterForm(taskType, subtask, parameters) {
         
         // 파라미터 배열을 순회하면서 HTML 생성
         for (const param of parameters) {
+            // 라우팅 설정 파라미터 디버깅
+            if (isRoutingTask) {
+                console.log(`[디버깅] 라우팅 파라미터 생성: ${param.name} / ${param.label} / ${param.type}`);
+            }
+            
             // 파라미터가 객체인지 확인
             if (!param || typeof param !== 'object') {
                 console.warn('유효하지 않은 파라미터 항목:', param);
@@ -1185,11 +1261,41 @@ function getTaskTypeLabel(type) {
 
 // 하위 작업 레이블 생성
 function getSubtaskLabel(taskType, subtask) {
+    // 새로운 작업 유형/하위 작업 매핑 추가
+    const newLabels = {
+        '포트 설정': {
+            '액세스 모드 설정': '액세스 모드 설정',
+            '트렁크 모드 설정': '트렁크 모드 설정', 
+            '포트 속도 설정': '포트 속도 설정',
+            '포트 듀플렉스 설정': '포트 듀플렉스 설정',
+            '포트 활성화': '포트 활성화',
+            '포트 IP추가': '포트 IP추가',
+            '인터페이스 활성화': '포트 활성화',  // 이전 이름 호환성
+            '인터페이스 설명 추가': '포트 IP추가'  // 이전 이름 호환성
+        },
+        '인터페이스 설정': {
+            '포트 활성화': '포트 활성화',
+            '포트 비활성화': '포트 비활성화',
+            '포트 속도 설정': '포트 속도 설정',
+            '포트 IP추가': '포트 IP추가',
+            '인터페이스 활성화': '포트 활성화',  // 이전 이름 호환성
+            '인터페이스 비활성화': '포트 비활성화',  // 이전 이름 호환성
+            '인터페이스 속도 설정': '포트 속도 설정',  // 이전 이름 호환성
+            '인터페이스 설명 추가': '포트 IP추가'  // 이전 이름 호환성
+        }
+    };
+    
+    // 새 매핑 확인
+    if (newLabels[taskType]?.[subtask]) {
+        return newLabels[taskType][subtask];
+    }
+    
+    // 기존 매핑 사용
     const labels = {
         'vlan': {
             'create': 'VLAN 생성',
             'delete': 'VLAN 삭제',
-            'interface_assign': '인터페이스 할당',
+            'interface_assign': '포트 할당',  // 인터페이스 -> 포트
             'trunk': '트렁크 설정'
         },
         'port': {
@@ -1224,7 +1330,7 @@ function getSubtaskLabel(taskType, subtask) {
             'bgp': 'BGP 상태'
         },
         'status': {
-            'interface': '인터페이스 상태',
+            'interface': '포트 상태', // 인터페이스 -> 포트 
             'traffic': '트래픽 상태'
         },
         'logging': {

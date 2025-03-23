@@ -181,12 +181,12 @@ def get_subtasks(task_type):
                 {'name': 'VLAN 이름 설정', 'description': 'VLAN 이름을 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
             ]
         elif mapped_task_type == '인터페이스 설정' or mapped_task_type == '포트':
-            logger.info("인터페이스 설정 작업에 대한 상세 작업 반환")
+            logger.info("인터페이스 설정 작업의 상세 작업 반환")
             subtasks = [
-                {'name': '인터페이스 설명 추가', 'description': '인터페이스에 설명을 추가합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '인터페이스 활성화', 'description': '인터페이스를 활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '인터페이스 비활성화', 'description': '인터페이스를 비활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '인터페이스 속도 설정', 'description': '인터페이스 속도와 듀플렉스 모드를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+                {'name': '포트 IP추가', 'description': '포트에 IP를 추가합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '포트 활성화', 'description': '포트를 활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '포트 비활성화', 'description': '포트를 비활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
+                {'name': '포트 속도 설정', 'description': '포트 속도와 듀플렉스 모드를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
             ]
         elif mapped_task_type == 'VLAN 인터페이스 설정':
             logger.info("VLAN 인터페이스 설정 작업에 대한 상세 작업 반환")
@@ -235,9 +235,10 @@ def get_subtasks(task_type):
             logger.warning(f"매칭되는 작업 유형을 찾을 수 없음: {mapped_task_type}, 기본 인터페이스 설정 작업 반환")
             # 기본적으로 인터페이스 설정 작업 반환
             subtasks = [
-                {'name': '인터페이스 설명 추가', 'description': '인터페이스에 설명을 추가합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
-                {'name': '인터페이스 활성화', 'description': '인터페이스를 활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
-                {'name': '인터페이스 비활성화', 'description': '인터페이스를 비활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'}
+                {'name': '포트 IP추가', 'description': '포트에 IP를 추가합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
+                {'name': '포트 활성화', 'description': '포트를 활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
+                {'name': '포트 비활성화', 'description': '포트를 비활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
+                {'name': '포트 속도 설정', 'description': '포트 속도와 듀플렉스 모드를 설정합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'}
             ]
             
         logger.info(f"반환할 상세 작업 개수: {len(subtasks)}")
@@ -273,15 +274,15 @@ def get_parameters(task_type, subtask):
             },
             '포트 설정': {
                 '액세스 모드 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
                     {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094}
                 ],
                 '트렁크 모드 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
                     {'name': 'native_vlan', 'type': 'number', 'label': '네이티브 VLAN', 'required': True, 'min': 1, 'max': 4094}
                 ],
                 '포트 속도 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
                     {'name': 'speed', 'type': 'select', 'label': '속도', 'required': True, 'options': [
                         {'value': 'auto', 'label': '자동'},
                         {'value': '10', 'label': '10 Mbps'},
@@ -290,19 +291,24 @@ def get_parameters(task_type, subtask):
                     ]}
                 ],
                 '포트 듀플렉스 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
                     {'name': 'duplex', 'type': 'select', 'label': '듀플렉스 모드', 'required': True, 'options': [
                         {'value': 'auto', 'label': '자동'},
                         {'value': 'full', 'label': '전이중(Full)'},
                         {'value': 'half', 'label': '반이중(Half)'}
                     ]}
                 ],
-                '인터페이스 활성화': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                '포트 활성화': [
+                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
                     {'name': 'status', 'type': 'select', 'label': '상태', 'required': True, 'options': [
                         {'value': 'no shutdown', 'label': '활성화'},
                         {'value': 'shutdown', 'label': '비활성화'}
                     ]}
+                ],
+                '포트 IP추가': [
+                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                    {'name': 'ip_address', 'type': 'text', 'label': 'IP 주소', 'required': True, 'placeholder': '예: 192.168.1.1'},
+                    {'name': 'subnet_mask', 'type': 'text', 'label': '서브넷 마스크', 'required': True, 'placeholder': '예: 255.255.255.0'}
                 ]
             },
             '라우팅 설정': {

@@ -241,7 +241,8 @@ class ConfigService:
             subtask_to_template = {
                 '포트 설정': {
                     '액세스 모드 설정': 'vlan_interface',
-                    '트렁크 모드 설정': 'vlan_interface'
+                    '트렁크 모드 설정': 'vlan_interface',
+                    '포트 IP추가': 'ip_config'
                 }
             }
             
