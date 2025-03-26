@@ -87,8 +87,8 @@ async function loadFeatures() {
     // LAYER2의 경우
     if (taskType === 'LAYER2') {
         const features = [
-            'Link-Aggregation(Manual)',
-            'Link-Aggregation(LACP)',
+            'Link-Aggregation (Manual)',
+            'Link-Aggregation (LACP)',
             'VLAN',
             'Spanning-tree'
         ];
@@ -267,10 +267,10 @@ async function executeTask() {
         });
         
         console.log('전송할 데이터:', {
-            task_type: taskType,
+            taskType: taskType,
             feature: feature,
             subtask: subtask,
-            config_mode: configMode,
+            configMode: configMode,
             parameters: parameters
         });
         
@@ -280,10 +280,10 @@ async function executeTask() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                task_type: taskType,
+                taskType: taskType,
                 feature: feature,
                 subtask: subtask,
-                config_mode: configMode,
+                configMode: configMode,
                 parameters: parameters
             })
         });

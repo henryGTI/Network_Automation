@@ -312,19 +312,85 @@ def get_subtasks(task_type):
                 {'name': 'NTP 서버 설정', 'description': 'NTP 서버를 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
                 {'name': '시간대 설정', 'description': '장비의 시간대를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
             ]
-        else:
-            logger.warning(f"매칭되는 작업 유형을 찾을 수 없음: {mapped_task_type}, 기본 인터페이스 설정 작업 반환")
-            # 기본적으로 인터페이스 설정 작업 반환
+        elif mapped_task_type == 'VLAN':
+            logger.info("VLAN 작업에 대한 상세 작업 반환")
             subtasks = [
-                {'name': '포트 IP추가', 'description': '포트에 IP를 추가합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
-                {'name': '포트 활성화', 'description': '포트를 활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
-                {'name': '포트 비활성화', 'description': '포트를 비활성화합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'},
-                {'name': '포트 속도 설정', 'description': '포트 속도와 듀플렉스 모드를 설정합니다', 'task_type': '인터페이스 설정', 'vendor': 'all'}
+                {
+                    'name': 'vlan_id',
+                    'type': 'text',
+                    'label': 'VLAN ID',
+                    'required': True,
+                    'placeholder': '예: 10-15,20'
+                },
+                {
+                    'name': 'interface',
+                    'type': 'text',
+                    'label': '인터페이스',
+                    'required': True,
+                    'placeholder': '예: gi 0/1'
+                },
+                {
+                    'name': 'mode',
+                    'type': 'select',
+                    'label': '모드',
+                    'required': True,
+                    'options': [{'value': 'access', 'label': 'Access'}, {'value': 'trunk', 'label': 'Trunk'}]
+                }
             ]
-            
-        logger.info(f"반환할 상세 작업 개수: {len(subtasks)}")
-        response = {"subtasks": subtasks}
-        return jsonify(subtasks)
+        elif mapped_task_type == 'Spanning-tree':
+            if subtask == 'config':
+                # 필수 파라미터 검증
+                if not isinstance(parameters, dict):
+                    logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
+                    return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
+
+                if config_mode == 'config(RSTP)':
+                    if 'instance_id' not in parameters or 'priority' not in parameters:
+                        missing_params = []
+                        if 'instance_id' not in parameters: missing_params.append('instance_id')
+                        if 'priority' not in parameters: missing_params.append('priority')
+                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                    
+                    commands = [
+                        'configure terminal',
+                        'spanning-tree mode rstp',
+                        'spanning-tree enable',
+                        f'spanning-tree mst instance {parameters["instance_id"]} priority {parameters["priority"]}',
+                        'spanning-tree mode rapid-vst',
+                        'end'
+                    ]
+                elif config_mode == 'config(PVST+)':
+                    if 'vlan_id' not in parameters or 'priority' not in parameters:
+                        missing_params = []
+                        if 'vlan_id' not in parameters: missing_params.append('vlan_id')
+                        if 'priority' not in parameters: missing_params.append('priority')
+                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                    
+                    commands = [
+                        'configure terminal',
+                        'spanning-tree mode rapid-vst',
+                        'spanning-tree enable',
+                        f'spanning-tree vlan {parameters["vlan_id"]} priority {parameters["priority"]}',
+                        'end'
+                    ]
+                logger.info(f"생성된 명령어: {commands}")
+            elif subtask == 'check':
+                commands = [
+                    'show spanning-tree',
+                    'show spanning-tree detail',
+                    'show spanning-tree bpdu statistics'
+                ]
+                logger.info(f"생성된 명령어: {commands}")
+        
+        if commands:
+            result = {'output': '\n'.join(commands)}
+            logger.info(f"반환할 결과: {result}")
+            return jsonify(result)
+        else:
+            logger.warning("생성된 명령어가 없습니다.")
+            return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
     except Exception as e:
         logger.error(f"상세 작업 목록 조회 중 오류: {str(e)}")
         import traceback
@@ -339,13 +405,25 @@ def get_parameters(task_type, feature, subtask, config_mode):
         
         # LAYER2 작업에 대한 파라미터 정의
         if task_type == 'LAYER2':
-            if feature == 'Link-Aggregation(Manual)':
+            if feature == 'Link-Aggregation (Manual)':
                 if subtask == 'config':
                     return jsonify([
-                        {'name': 'group_number', 'type': 'number', 'label': '그룹 번호', 'required': True},
-                        {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True},
-                        {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True, 
-                         'options': [{'value': 'active', 'label': 'Active'}, {'value': 'passive', 'label': 'Passive'}]}
+                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': True, 'default': '1'},
+                        {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: 0/1-0/2'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([
+                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': False, 'default': '1'}
+                    ])
+            elif feature == 'Link-Aggregation (LACP)':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': True, 'default': '1'},
+                        {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: 0/1-0/2'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([
+                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': False, 'default': '1'}
                     ])
             elif feature == 'VLAN':
                 if subtask == 'config':
@@ -354,6 +432,10 @@ def get_parameters(task_type, feature, subtask, config_mode):
                         {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: gi 0/1'},
                         {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True,
                          'options': [{'value': 'access', 'label': 'Access'}, {'value': 'trunk', 'label': 'Trunk'}]}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': False, 'placeholder': '예: gi 0/1'}
                     ])
             elif feature == 'Spanning-tree':
                 if subtask == 'config':
@@ -382,80 +464,181 @@ def execute_task():
     """작업을 실행하고 결과를 반환합니다."""
     try:
         data = request.get_json()
-        task_type = data.get('task_type')
+        logger.info("=== 실행 요청 데이터 ===")
+        logger.info(f"Raw Data: {data}")
+        
+        if not data:
+            logger.error("요청 데이터가 없습니다.")
+            return jsonify({'error': '요청 데이터가 없습니다.'}), 400
+            
+        task_type = data.get('taskType')  # taskType으로 변경
         feature = data.get('feature')
         subtask = data.get('subtask')
-        config_mode = data.get('config_mode')
+        config_mode = data.get('configMode')  # configMode로 변경
         parameters = data.get('parameters', {})
         
-        logger.info(f"작업 실행 요청: task_type={task_type}, feature={feature}, subtask={subtask}, config_mode={config_mode}")
-        logger.debug(f"파라미터: {parameters}")
+        logger.info(f"Task Type: {task_type}")
+        logger.info(f"Feature: {feature}")
+        logger.info(f"Subtask: {subtask}")
+        logger.info(f"Config Mode: {config_mode}")
+        logger.info(f"Parameters: {parameters}")
+        
+        # 필수 필드 검증
+        if not all([task_type, feature, subtask]):
+            missing_fields = []
+            if not task_type: missing_fields.append('taskType')
+            if not feature: missing_fields.append('feature')
+            if not subtask: missing_fields.append('subtask')
+            logger.error(f"필수 필드 누락: {', '.join(missing_fields)}")
+            return jsonify({'error': f"다음 필수 항목이 누락되었습니다: {', '.join(missing_fields)}"}), 400
         
         # LAYER2 작업 처리
         if task_type == 'LAYER2':
             commands = []
             
-            if feature == 'Link-Aggregation(Manual)':
+            if feature == 'Link-Aggregation (Manual)':
                 if subtask == 'config':
+                    # 필수 파라미터 검증
+                    if not isinstance(parameters, dict):
+                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
+                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
+                        
+                    if 'group_id' not in parameters or 'interface_list' not in parameters:
+                        missing_params = []
+                        if 'group_id' not in parameters: missing_params.append('group_id')
+                        if 'interface_list' not in parameters: missing_params.append('interface_list')
+                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                        
                     commands = [
                         'configure terminal',
-                        f'link-aggregation {parameters["group_number"]} mode manual',
-                        f'interface {parameters["interface_list"]}',
-                        f'link-aggregation {parameters["group_number"]} {parameters["mode"]}',
+                        f'link-aggregation {parameters["group_id"]} mode manual',
+                        f'interface gi {parameters["interface_list"]}',
+                        f'link-aggregation {parameters["group_id"]} manual',
                         'end'
                     ]
+                    logger.info(f"생성된 명령어: {commands}")
                 elif subtask == 'check':
                     commands = [
-                        'show link-aggregation summary',
-                        f'show link-aggregation {parameters.get("group_number", "")} detail'
+                        'show link-aggregation brief',
+                        f'show link-aggregation group {parameters.get("group_id", "1")}'
                     ]
+                    logger.info(f"생성된 명령어: {commands}")
+            elif feature == 'Link-Aggregation (LACP)':
+                if subtask == 'config':
+                    # 필수 파라미터 검증
+                    if not isinstance(parameters, dict):
+                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
+                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
+                        
+                    if 'group_id' not in parameters or 'interface_list' not in parameters:
+                        missing_params = []
+                        if 'group_id' not in parameters: missing_params.append('group_id')
+                        if 'interface_list' not in parameters: missing_params.append('interface_list')
+                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                        
+                    commands = [
+                        'configure terminal',
+                        f'link-aggregation {parameters["group_id"]} mode lacp',
+                        f'interface gi {parameters["interface_list"]}',
+                        f'link-aggregation {parameters["group_id"]} active',
+                        'end'
+                    ]
+                    logger.info(f"생성된 명령어: {commands}")
+                elif subtask == 'check':
+                    commands = [
+                        'show link-aggregation brief',
+                        f'show link-aggregation group {parameters.get("group_id", "1")}'
+                    ]
+                    logger.info(f"생성된 명령어: {commands}")
             elif feature == 'VLAN':
                 if subtask == 'config':
+                    # 필수 파라미터 검증
+                    if not isinstance(parameters, dict):
+                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
+                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
+                        
+                    if 'vlan_id' not in parameters or 'interface' not in parameters or 'mode' not in parameters:
+                        missing_params = []
+                        if 'vlan_id' not in parameters: missing_params.append('vlan_id')
+                        if 'interface' not in parameters: missing_params.append('interface')
+                        if 'mode' not in parameters: missing_params.append('mode')
+                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                    
                     commands = [
                         'configure terminal',
                         f'vlan {parameters["vlan_id"]}',
-                        f'interface {parameters["interface"]}',
-                        f'switchport mode {parameters["mode"]}'
+                        f'interface {parameters["interface"]}'
                     ]
-                    if parameters["mode"] == 'access':
+                    
+                    if parameters['mode'] == 'access':
                         commands.append(f'switchport access vlan {parameters["vlan_id"]}')
-                    elif parameters["mode"] == 'trunk':
-                        commands.append(f'switchport trunk allowed vlan add {parameters["vlan_id"]}')
-                    commands.append('exit')
+                    elif parameters['mode'] == 'trunk':
+                        commands.extend([
+                            'switchport mode trunk',
+                            f'switchport trunk allowed vlan add {parameters["vlan_id"]}'
+                        ])
+                    
                     commands.append('end')
+                    logger.info(f"생성된 명령어: {commands}")
                 elif subtask == 'check':
-                    commands = [
-                        'show vlan',
-                        f'show interface {parameters.get("interface", "")} vlan status'
-                    ]
+                    commands = ['show vlan']
+                    if parameters.get('interface'):
+                        commands.append(f'show interface {parameters["interface"]} vlan status')
+                    logger.info(f"생성된 명령어: {commands}")
             elif feature == 'Spanning-tree':
                 if subtask == 'config':
+                    # 필수 파라미터 검증
+                    if not isinstance(parameters, dict):
+                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
+                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
+
                     if config_mode == 'config(RSTP)':
+                        if 'instance_id' not in parameters or 'priority' not in parameters:
+                            missing_params = []
+                            if 'instance_id' not in parameters: missing_params.append('instance_id')
+                            if 'priority' not in parameters: missing_params.append('priority')
+                            logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                            return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                        
                         commands = [
                             'configure terminal',
                             'spanning-tree mode rstp',
                             'spanning-tree enable',
-                            'spanning-tree mst instance 0 priority 0',
+                            f'spanning-tree mst instance {parameters["instance_id"]} priority {parameters["priority"]}',
+                            'spanning-tree mode rapid-vst',
                             'end'
                         ]
                     elif config_mode == 'config(PVST+)':
+                        if 'vlan_id' not in parameters or 'priority' not in parameters:
+                            missing_params = []
+                            if 'vlan_id' not in parameters: missing_params.append('vlan_id')
+                            if 'priority' not in parameters: missing_params.append('priority')
+                            logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
+                            return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
+                        
                         commands = [
                             'configure terminal',
                             'spanning-tree mode rapid-vst',
                             'spanning-tree enable',
-                            'spanning-tree vlan 10 priority 0',
+                            f'spanning-tree vlan {parameters["vlan_id"]} priority {parameters["priority"]}',
                             'end'
                         ]
+                    logger.info(f"생성된 명령어: {commands}")
                 elif subtask == 'check':
                     commands = [
                         'show spanning-tree',
                         'show spanning-tree detail',
                         'show spanning-tree bpdu statistics'
                     ]
+                    logger.info(f"생성된 명령어: {commands}")
             
             if commands:
-                logger.info(f"생성된 명령어: {commands}")
-                return jsonify({'output': '\n'.join(commands)})
+                result = {'output': '\n'.join(commands)}
+                logger.info(f"반환할 결과: {result}")
+                return jsonify(result)
             else:
                 logger.warning("생성된 명령어가 없습니다.")
                 return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
@@ -465,6 +648,8 @@ def execute_task():
         
     except Exception as e:
         logger.error(f"작업 실행 실패: {str(e)}")
+        import traceback
+        logger.error(f"상세 오류: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/tasks', methods=['GET'])
