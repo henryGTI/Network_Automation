@@ -350,26 +350,25 @@ def get_parameters(task_type, feature, subtask, config_mode):
             elif feature == 'VLAN':
                 if subtask == 'config':
                     return jsonify([
-                        {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True},
-                        {'name': 'vlan_name', 'type': 'text', 'label': 'VLAN 이름', 'required': True},
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True},
+                        {'name': 'vlan_id', 'type': 'text', 'label': 'VLAN ID', 'required': True, 'placeholder': '예: 10-15,20'},
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: gi 0/1'},
                         {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True,
                          'options': [{'value': 'access', 'label': 'Access'}, {'value': 'trunk', 'label': 'Trunk'}]}
                     ])
             elif feature == 'Spanning-tree':
                 if subtask == 'config':
-                    if configMode == 'config(RSTP)':
+                    if config_mode == 'config(RSTP)':
                         return jsonify([
-                            {'name': 'priority', 'type': 'number', 'label': '브리지 우선순위', 'required': True},
-                            {'name': 'forward_time', 'type': 'number', 'label': 'Forward Time', 'required': False},
-                            {'name': 'max_age', 'type': 'number', 'label': 'Max Age', 'required': False}
+                            {'name': 'instance_id', 'type': 'number', 'label': 'MST 인스턴스 ID', 'required': True, 'default': '0'},
+                            {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'default': '32768'}
                         ])
-                    elif configMode == 'config(PVST+)':
+                    elif config_mode == 'config(PVST+)':
                         return jsonify([
                             {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True},
-                            {'name': 'priority', 'type': 'number', 'label': '브리지 우선순위', 'required': True},
-                            {'name': 'forward_time', 'type': 'number', 'label': 'Forward Time', 'required': False}
+                            {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'default': '32768'}
                         ])
+                elif subtask == 'check':
+                    return jsonify([])  # check 명령어는 파라미터가 필요 없음
         
         logger.warning(f"지원되지 않는 파라미터 요청: {task_type}/{feature}/{subtask}/{config_mode}")
         return jsonify([])
@@ -405,40 +404,54 @@ def execute_task():
                         f'link-aggregation {parameters["group_number"]} {parameters["mode"]}',
                         'end'
                     ]
+                elif subtask == 'check':
+                    commands = [
+                        'show link-aggregation summary',
+                        f'show link-aggregation {parameters.get("group_number", "")} detail'
+                    ]
             elif feature == 'VLAN':
                 if subtask == 'config':
                     commands = [
                         'configure terminal',
                         f'vlan {parameters["vlan_id"]}',
-                        f'name {parameters["vlan_name"]}',
-                        'exit',
                         f'interface {parameters["interface"]}',
-                        f'switchport mode {parameters["mode"]}',
-                        'switchport access vlan {parameters["vlan_id"]}' if parameters["mode"] == 'access' else 'switchport trunk allowed vlan add {parameters["vlan_id"]}',
-                        'end'
+                        f'switchport mode {parameters["mode"]}'
+                    ]
+                    if parameters["mode"] == 'access':
+                        commands.append(f'switchport access vlan {parameters["vlan_id"]}')
+                    elif parameters["mode"] == 'trunk':
+                        commands.append(f'switchport trunk allowed vlan add {parameters["vlan_id"]}')
+                    commands.append('exit')
+                    commands.append('end')
+                elif subtask == 'check':
+                    commands = [
+                        'show vlan',
+                        f'show interface {parameters.get("interface", "")} vlan status'
                     ]
             elif feature == 'Spanning-tree':
                 if subtask == 'config':
                     if config_mode == 'config(RSTP)':
                         commands = [
                             'configure terminal',
-                            'spanning-tree mode rapid-pvst',
-                            f'spanning-tree bridge priority {parameters["priority"]}',
+                            'spanning-tree mode rstp',
+                            'spanning-tree enable',
+                            'spanning-tree mst instance 0 priority 0',
+                            'end'
                         ]
-                        if 'forward_time' in parameters:
-                            commands.append(f'spanning-tree forward-time {parameters["forward_time"]}')
-                        if 'max_age' in parameters:
-                            commands.append(f'spanning-tree max-age {parameters["max_age"]}')
-                        commands.append('end')
                     elif config_mode == 'config(PVST+)':
                         commands = [
                             'configure terminal',
-                            'spanning-tree mode pvst',
-                            f'spanning-tree vlan {parameters["vlan_id"]} priority {parameters["priority"]}',
+                            'spanning-tree mode rapid-vst',
+                            'spanning-tree enable',
+                            'spanning-tree vlan 10 priority 0',
+                            'end'
                         ]
-                        if 'forward_time' in parameters:
-                            commands.append(f'spanning-tree vlan {parameters["vlan_id"]} forward-time {parameters["forward_time"]}')
-                        commands.append('end')
+                elif subtask == 'check':
+                    commands = [
+                        'show spanning-tree',
+                        'show spanning-tree detail',
+                        'show spanning-tree bpdu statistics'
+                    ]
             
             if commands:
                 logger.info(f"생성된 명령어: {commands}")
