@@ -173,20 +173,82 @@ def get_subtasks(task_type):
         
         logger.info(f"작업 유형 매칭 시작: {mapped_task_type}")
         
-        if mapped_task_type == 'VLAN 생성/삭제' or mapped_task_type == 'VLAN 생성' or mapped_task_type == 'VLAN':
+        if mapped_task_type == 'VLAN 생성/삭제' or mapped_task_type == 'VLAN 관리':
             logger.info("VLAN 생성/삭제 작업에 대한 상세 작업 반환")
             subtasks = [
-                {'name': 'VLAN 생성', 'description': 'VLAN을 생성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': 'VLAN 삭제', 'description': 'VLAN을 삭제합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': 'VLAN 이름 설정', 'description': 'VLAN 이름을 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+                {
+                    'name': 'VLAN 생성',
+                    'description': 'VLAN을 생성합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'vlan_id', 'type': 'text', 'label': 'VLAN ID', 'required': True, 'placeholder': '예: 10'},
+                        {'name': 'vlan_name', 'type': 'text', 'label': 'VLAN 이름', 'required': True, 'placeholder': '예: VLAN_10'}
+                    ]
+                },
+                {
+                    'name': 'VLAN 삭제',
+                    'description': 'VLAN을 삭제합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'vlan_id', 'type': 'text', 'label': 'VLAN ID', 'required': True, 'placeholder': '예: 10'}
+                    ]
+                },
+                {
+                    'name': 'VLAN 이름 설정',
+                    'description': 'VLAN 이름을 설정합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'vlan_id', 'type': 'text', 'label': 'VLAN ID', 'required': True, 'placeholder': '예: 10'},
+                        {'name': 'vlan_name', 'type': 'text', 'label': 'VLAN 이름', 'required': True, 'placeholder': '예: VLAN_10'}
+                    ]
+                }
             ]
-        elif mapped_task_type == '인터페이스 설정' or mapped_task_type == '포트':
+        elif mapped_task_type == '인터페이스 설정' or mapped_task_type == '포트 설정':
             logger.info("인터페이스 설정 작업의 상세 작업 반환")
             subtasks = [
-                {'name': '포트 IP추가', 'description': '포트에 IP를 추가합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '포트 활성화', 'description': '포트를 활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '포트 비활성화', 'description': '포트를 비활성화합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '포트 속도 설정', 'description': '포트 속도와 듀플렉스 모드를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+                {
+                    'name': '포트 IP추가',
+                    'description': '포트에 IP를 추가합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'interface_name', 'type': 'text', 'label': '인터페이스 이름', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                        {'name': 'ip_address', 'type': 'text', 'label': 'IP 주소', 'required': True, 'placeholder': '예: 192.168.1.1'},
+                        {'name': 'subnet_mask', 'type': 'text', 'label': '서브넷 마스크', 'required': True, 'placeholder': '예: 255.255.255.0'}
+                    ]
+                },
+                {
+                    'name': '포트 활성화',
+                    'description': '포트를 활성화합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'interface_name', 'type': 'text', 'label': '인터페이스 이름', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'}
+                    ]
+                },
+                {
+                    'name': '포트 비활성화',
+                    'description': '포트를 비활성화합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'interface_name', 'type': 'text', 'label': '인터페이스 이름', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'}
+                    ]
+                },
+                {
+                    'name': '포트 속도 설정',
+                    'description': '포트 속도와 듀플렉스 모드를 설정합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'interface_name', 'type': 'text', 'label': '인터페이스 이름', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
+                        {'name': 'speed', 'type': 'select', 'label': '속도', 'required': True, 'options': ['auto', '10', '100', '1000']},
+                        {'name': 'duplex', 'type': 'select', 'label': '듀플렉스', 'required': True, 'options': ['auto', 'full', 'half']}
+                    ]
+                }
             ]
         elif mapped_task_type == 'VLAN 인터페이스 설정':
             logger.info("VLAN 인터페이스 설정 작업에 대한 상세 작업 반환")
@@ -206,10 +268,29 @@ def get_subtasks(task_type):
         elif mapped_task_type == '라우팅 설정':
             logger.info("라우팅 설정 작업에 대한 상세 작업 반환")
             subtasks = [
-                {'name': '정적 라우팅 설정', 'description': '정적 라우트를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': '기본 라우트 설정', 'description': '기본 라우트를 설정합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': 'OSPF 설정', 'description': 'OSPF 라우팅 프로토콜을 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'},
-                {'name': 'BGP 설정', 'description': 'BGP 라우팅 프로토콜을 구성합니다', 'task_type': mapped_task_type, 'vendor': 'all'}
+                {
+                    'name': 'OSPF 설정',
+                    'description': 'OSPF 라우팅 프로토콜을 설정합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'process_id', 'type': 'text', 'label': '프로세스 ID', 'required': True, 'placeholder': '1-65535'},
+                        {'name': 'network_address', 'type': 'text', 'label': '네트워크 주소', 'required': True, 'placeholder': '예: 192.168.1.0'},
+                        {'name': 'wildcard_mask', 'type': 'text', 'label': '와일드카드 마스크', 'required': True, 'placeholder': '예: 0.0.0.255'},
+                        {'name': 'area_id', 'type': 'text', 'label': '영역 ID', 'required': True, 'placeholder': '예: 0'}
+                    ]
+                },
+                {
+                    'name': '정적 라우팅 설정',
+                    'description': '정적 라우팅을 설정합니다',
+                    'task_type': mapped_task_type,
+                    'vendor': 'all',
+                    'parameters': [
+                        {'name': 'network_address', 'type': 'text', 'label': '대상 네트워크', 'required': True, 'placeholder': '예: 192.168.1.0'},
+                        {'name': 'subnet_mask', 'type': 'text', 'label': '서브넷 마스크', 'required': True, 'placeholder': '예: 255.255.255.0'},
+                        {'name': 'next_hop', 'type': 'text', 'label': '다음 홉 주소', 'required': True, 'placeholder': '예: 10.0.0.1'}
+                    ]
+                }
             ]
         elif mapped_task_type == 'ACL 설정':
             logger.info("ACL 설정 작업에 대한 상세 작업 반환")
@@ -250,320 +331,128 @@ def get_subtasks(task_type):
         logger.error(f"상세 오류: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-@bp.route('/api/parameters/<task_type>/<subtask>', methods=['GET'])
-def get_parameters(task_type, subtask):
-    """특정 작업에 필요한 파라미터 목록을 반환합니다."""
+@bp.route('/api/parameters/<task_type>/<feature>/<subtask>/<config_mode>', methods=['GET'])
+def get_parameters(task_type, feature, subtask, config_mode):
+    """특정 작업에 대한 파라미터 목록을 반환합니다."""
     try:
-        parameters = {
-            'VLAN 관리': {
-                'VLAN 생성': [
-                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094},
-                    {'name': 'vlan_name', 'type': 'text', 'label': 'VLAN 이름', 'required': True}
-                ],
-                'VLAN 삭제': [
-                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094}
-                ],
-                '인터페이스 VLAN 할당': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094}
-                ],
-                '트렁크 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'allowed_vlans', 'type': 'text', 'label': '허용 VLAN', 'required': True, 'placeholder': '예: 1-10,20,30-40'}
-                ]
-            },
-            '포트 설정': {
-                '액세스 모드 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094}
-                ],
-                '트렁크 모드 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'native_vlan', 'type': 'number', 'label': '네이티브 VLAN', 'required': True, 'min': 1, 'max': 4094}
-                ],
-                '포트 속도 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'speed', 'type': 'select', 'label': '속도', 'required': True, 'options': [
-                        {'value': 'auto', 'label': '자동'},
-                        {'value': '10', 'label': '10 Mbps'},
-                        {'value': '100', 'label': '100 Mbps'},
-                        {'value': '1000', 'label': '1 Gbps'}
-                    ]}
-                ],
-                '포트 듀플렉스 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'duplex', 'type': 'select', 'label': '듀플렉스 모드', 'required': True, 'options': [
-                        {'value': 'auto', 'label': '자동'},
-                        {'value': 'full', 'label': '전이중(Full)'},
-                        {'value': 'half', 'label': '반이중(Half)'}
-                    ]}
-                ],
-                '포트 활성화': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'status', 'type': 'select', 'label': '상태', 'required': True, 'options': [
-                        {'value': 'no shutdown', 'label': '활성화'},
-                        {'value': 'shutdown', 'label': '비활성화'}
-                    ]}
-                ],
-                '포트 IP추가': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '포트', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'ip_address', 'type': 'text', 'label': 'IP 주소', 'required': True, 'placeholder': '예: 192.168.1.1'},
-                    {'name': 'subnet_mask', 'type': 'text', 'label': '서브넷 마스크', 'required': True, 'placeholder': '예: 255.255.255.0'}
-                ]
-            },
-            '라우팅 설정': {
-                '정적 라우팅 설정': [
-                    {'name': 'network_address', 'type': 'text', 'label': '대상 네트워크', 'required': True, 'placeholder': '예: 192.168.2.0'},
-                    {'name': 'subnet_mask', 'type': 'text', 'label': '서브넷 마스크', 'required': True, 'placeholder': '예: 255.255.255.0'},
-                    {'name': 'next_hop', 'type': 'text', 'label': '다음 홉 주소', 'required': True, 'placeholder': '예: 10.0.0.1'}
-                ],
-                'OSPF 설정': [
-                    {'name': 'process_id', 'type': 'number', 'label': '프로세스 ID', 'required': True, 'min': 1, 'max': 65535},
-                    {'name': 'network_address', 'type': 'text', 'label': '네트워크 주소', 'required': True, 'placeholder': '예: 192.168.1.0'},
-                    {'name': 'wildcard_mask', 'type': 'text', 'label': '와일드카드 마스크', 'required': True, 'placeholder': '예: 0.0.0.255'},
-                    {'name': 'area_id', 'type': 'number', 'label': '에리어 ID', 'required': True, 'min': 0}
-                ],
-                'EIGRP 설정': [
-                    {'name': 'as_number', 'type': 'number', 'label': 'AS 번호', 'required': True, 'min': 1, 'max': 65535},
-                    {'name': 'network_address', 'type': 'text', 'label': '네트워크 주소', 'required': True, 'placeholder': '예: 192.168.1.0'},
-                    {'name': 'wildcard_mask', 'type': 'text', 'label': '와일드카드 마스크', 'required': True, 'placeholder': '예: 0.0.0.255'}
-                ],
-                'BGP 설정': [
-                    {'name': 'as_number', 'type': 'number', 'label': 'AS 번호', 'required': True, 'min': 1, 'max': 65535},
-                    {'name': 'neighbor_ip', 'type': 'text', 'label': '이웃 라우터 IP', 'required': True, 'placeholder': '예: 192.168.1.2'},
-                    {'name': 'remote_as', 'type': 'number', 'label': '원격 AS 번호', 'required': True, 'min': 1, 'max': 65535}
-                ]
-            },
-            '보안 설정': {
-                'Port Security 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'max_mac', 'type': 'number', 'label': '최대 MAC 주소 수', 'required': True, 'min': 1, 'max': 8192},
-                    {'name': 'violation', 'type': 'select', 'label': '위반 모드', 'required': True, 'options': [
-                        {'value': 'protect', 'label': 'Protect'},
-                        {'value': 'restrict', 'label': 'Restrict'},
-                        {'value': 'shutdown', 'label': 'Shutdown'}
-                    ]}
-                ],
-                'SSH/Telnet 접근 제한': [
-                    {'name': 'access_type', 'type': 'select', 'label': '접근 유형', 'required': True, 'options': [
-                        {'value': 'ssh', 'label': 'SSH'},
-                        {'value': 'telnet', 'label': 'Telnet'},
-                        {'value': 'both', 'label': 'SSH 및 Telnet'}
-                    ]},
-                    {'name': 'acl_number', 'type': 'number', 'label': 'ACL 번호', 'required': True, 'min': 1, 'max': 99}
-                ],
-                'AAA 인증 설정': [
-                    {'name': 'auth_type', 'type': 'select', 'label': '인증 유형', 'required': True, 'options': [
-                        {'value': 'local', 'label': '로컬 인증'},
-                        {'value': 'tacacs', 'label': 'TACACS+'},
-                        {'value': 'radius', 'label': 'RADIUS'}
-                    ]},
-                    {'name': 'server_ip', 'type': 'text', 'label': '서버 IP', 'required': False, 'placeholder': '예: 10.1.1.1'}
-                ],
-                'ACL 설정': [
-                    {'name': 'acl_type', 'type': 'select', 'label': 'ACL 유형', 'required': True, 'options': [
-                        {'value': 'standard', 'label': '표준(Standard)'},
-                        {'value': 'extended', 'label': '확장(Extended)'}
-                    ]},
-                    {'name': 'acl_number', 'type': 'number', 'label': 'ACL 번호', 'required': True, 'min': 1, 'max': 199},
-                    {'name': 'action', 'type': 'select', 'label': '작업', 'required': True, 'options': [
-                        {'value': 'permit', 'label': '허용(permit)'},
-                        {'value': 'deny', 'label': '거부(deny)'}
-                    ]},
-                    {'name': 'source_ip', 'type': 'text', 'label': '소스 IP', 'required': True, 'placeholder': '예: 192.168.1.0'},
-                    {'name': 'source_wildcard', 'type': 'text', 'label': '소스 와일드카드', 'required': True, 'placeholder': '예: 0.0.0.255'}
-                ]
-            },
-            'STP 및 LACP': {
-                'STP 모드 설정': [
-                    {'name': 'stp_mode', 'type': 'select', 'label': 'STP 모드', 'required': True, 'options': [
-                        {'value': 'stp', 'label': 'STP'},
-                        {'value': 'rapid-pvst', 'label': 'Rapid PVST+'},
-                        {'value': 'mst', 'label': 'MST'}
-                    ]}
-                ],
-                'STP 우선순위 설정': [
-                    {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094},
-                    {'name': 'priority', 'type': 'select', 'label': '우선순위', 'required': True, 'options': [
-                        {'value': '0', 'label': '0 (최상위)'},
-                        {'value': '4096', 'label': '4096'},
-                        {'value': '8192', 'label': '8192'},
-                        {'value': '16384', 'label': '16384 (기본값)'},
-                        {'value': '32768', 'label': '32768'},
-                        {'value': '49152', 'label': '49152'}
-                    ]}
-                ],
-                'LACP 채널 구성': [
-                    {'name': 'channel_group', 'type': 'number', 'label': '채널 그룹', 'required': True, 'min': 1, 'max': 128},
-                    {'name': 'interfaces', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1,GigabitEthernet1/0/2'}
-                ],
-                '포트 채널 설정': [
-                    {'name': 'channel_group', 'type': 'number', 'label': '채널 그룹', 'required': True, 'min': 1, 'max': 128},
-                    {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True, 'options': [
-                        {'value': 'on', 'label': 'On (PAgP/LACP 없음)'},
-                        {'value': 'active', 'label': 'Active (LACP)'},
-                        {'value': 'passive', 'label': 'Passive (LACP)'},
-                        {'value': 'auto', 'label': 'Auto (PAgP)'},
-                        {'value': 'desirable', 'label': 'Desirable (PAgP)'}
-                    ]}
-                ]
-            },
-            'QoS 및 트래픽 제어': {
-                'QoS 정책 적용': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'policy_name', 'type': 'text', 'label': '정책 이름', 'required': True},
-                    {'name': 'direction', 'type': 'select', 'label': '방향', 'required': True, 'options': [
-                        {'value': 'input', 'label': '인바운드(input)'},
-                        {'value': 'output', 'label': '아웃바운드(output)'}
-                    ]}
-                ],
-                '트래픽 제한 설정': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: GigabitEthernet1/0/1'},
-                    {'name': 'rate_limit', 'type': 'number', 'label': '제한 속도(kbps)', 'required': True, 'min': 8, 'max': 1000000},
-                    {'name': 'burst', 'type': 'number', 'label': '버스트 크기(bytes)', 'required': True, 'min': 1000, 'max': 512000000}
-                ],
-                '서비스 정책 설정': [
-                    {'name': 'policy_name', 'type': 'text', 'label': '정책 이름', 'required': True},
-                    {'name': 'class_name', 'type': 'text', 'label': '클래스 이름', 'required': True},
-                    {'name': 'action', 'type': 'select', 'label': '작업', 'required': True, 'options': [
-                        {'value': 'bandwidth', 'label': '대역폭 할당'},
-                        {'value': 'priority', 'label': '우선순위 큐'},
-                        {'value': 'shape', 'label': '트래픽 쉐이핑'},
-                        {'value': 'police', 'label': '트래픽 폴리싱'}
-                    ]},
-                    {'name': 'value', 'type': 'number', 'label': '값(kbps)', 'required': True, 'min': 8, 'max': 1000000}
-                ]
-            },
-            '라우팅 상태 모니터링': {
-                '라우팅 테이블 확인': [],
-                'OSPF 이웃 정보 확인': [
-                    {'name': 'process_id', 'type': 'number', 'label': '프로세스 ID', 'required': False, 'min': 1, 'max': 65535}
-                ],
-                'BGP 요약 정보 확인': [
-                    {'name': 'as_number', 'type': 'number', 'label': 'AS 번호', 'required': False, 'min': 1, 'max': 65535}
-                ]
-            },
-            '네트워크 상태 점검': {
-                '인터페이스 상태 확인': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': False, 'placeholder': '예: GigabitEthernet1/0/1'}
-                ],
-                '트래픽 모니터링': [
-                    {'name': 'interface_name', 'type': 'text', 'label': '인터페이스', 'required': False, 'placeholder': '예: GigabitEthernet1/0/1'}
-                ]
-            },
-            '로그 수집': {
-                '시스템 로그 수집': [
-                    {'name': 'severity', 'type': 'select', 'label': '심각도', 'required': False, 'options': [
-                        {'value': 'all', 'label': '모든 로그'},
-                        {'value': 'errors', 'label': '오류 로그만'},
-                        {'value': 'warnings', 'label': '경고 이상 로그'}
-                    ]}
-                ],
-                '로그 파일 저장': [
-                    {'name': 'filename', 'type': 'text', 'label': '파일명', 'required': True, 'placeholder': '예: device_logs_20230323'},
-                    {'name': 'format', 'type': 'select', 'label': '형식', 'required': True, 'options': [
-                        {'value': 'txt', 'label': '텍스트 파일(TXT)'},
-                        {'value': 'csv', 'label': 'CSV 파일'},
-                        {'value': 'json', 'label': 'JSON 파일'}
-                    ]}
-                ]
-            },
-            '구성 백업 및 복원': {
-                'Running-config 백업': [
-                    {'name': 'backup_location', 'type': 'select', 'label': '백업 위치', 'required': True, 'options': [
-                        {'value': 'local', 'label': '로컬 저장'},
-                        {'value': 'tftp', 'label': 'TFTP 서버'}
-                    ]},
-                    {'name': 'filename', 'type': 'text', 'label': '파일명', 'required': True, 'placeholder': '예: running_config_backup'}
-                ],
-                'Startup-config 백업': [
-                    {'name': 'backup_location', 'type': 'select', 'label': '백업 위치', 'required': True, 'options': [
-                        {'value': 'local', 'label': '로컬 저장'},
-                        {'value': 'tftp', 'label': 'TFTP 서버'}
-                    ]},
-                    {'name': 'filename', 'type': 'text', 'label': '파일명', 'required': True, 'placeholder': '예: startup_config_backup'}
-                ],
-                '설정 복원': [
-                    {'name': 'restore_location', 'type': 'select', 'label': '복원 위치', 'required': True, 'options': [
-                        {'value': 'local', 'label': '로컬 파일'},
-                        {'value': 'tftp', 'label': 'TFTP 서버'}
-                    ]},
-                    {'name': 'filename', 'type': 'text', 'label': '파일명', 'required': True, 'placeholder': '예: config_backup.cfg'},
-                    {'name': 'config_type', 'type': 'select', 'label': '복원할 설정 유형', 'required': True, 'options': [
-                        {'value': 'running-config', 'label': 'Running-config'},
-                        {'value': 'startup-config', 'label': 'Startup-config'}
-                    ]}
-                ],
-                'TFTP 백업 설정': [
-                    {'name': 'tftp_server', 'type': 'text', 'label': 'TFTP 서버 주소', 'required': True, 'placeholder': '예: 192.168.1.100'},
-                    {'name': 'filename', 'type': 'text', 'label': '파일명', 'required': True, 'placeholder': '예: running-config'}
-                ]
-            },
-            'SNMP 및 모니터링': {
-                'SNMP 서버 설정': [
-                    {'name': 'server_ip', 'type': 'text', 'label': 'SNMP 서버 IP', 'required': True, 'placeholder': '예: 192.168.1.100'},
-                    {'name': 'version', 'type': 'select', 'label': 'SNMP 버전', 'required': True, 'options': [
-                        {'value': '1', 'label': 'SNMPv1'},
-                        {'value': '2c', 'label': 'SNMPv2c'},
-                        {'value': '3', 'label': 'SNMPv3'}
-                    ]}
-                ],
-                'SNMP 커뮤니티 설정': [
-                    {'name': 'community_string', 'type': 'text', 'label': '커뮤니티 문자열', 'required': True},
-                    {'name': 'access_type', 'type': 'select', 'label': '접근 권한', 'required': True, 'options': [
-                        {'value': 'ro', 'label': '읽기 전용(RO)'},
-                        {'value': 'rw', 'label': '읽기/쓰기(RW)'}
-                    ]}
-                ],
-                'CDP 정보 수집': [
-                    {'name': 'detail', 'type': 'select', 'label': '상세 정보', 'required': False, 'options': [
-                        {'value': 'basic', 'label': '기본 정보'},
-                        {'value': 'detail', 'label': '상세 정보'}
-                    ]}
-                ],
-                'LLDP 정보 수집': [
-                    {'name': 'detail', 'type': 'select', 'label': '상세 정보', 'required': False, 'options': [
-                        {'value': 'basic', 'label': '기본 정보'},
-                        {'value': 'detail', 'label': '상세 정보'}
-                    ]}
-                ]
-            },
-            '자동화 스크립트 확장': {
-                '다중 장비 설정 배포': [
-                    {'name': 'device_list', 'type': 'text', 'label': '장비 목록(쉼표로 구분)', 'required': True, 'placeholder': '예: 1,2,3'},
-                    {'name': 'config_file', 'type': 'text', 'label': '설정 파일명', 'required': True}
-                ],
-                '조건별 설정 변경': [
-                    {'name': 'condition_type', 'type': 'select', 'label': '조건 유형', 'required': True, 'options': [
-                        {'value': 'interface_status', 'label': '인터페이스 상태'},
-                        {'value': 'cpu_usage', 'label': 'CPU 사용률'},
-                        {'value': 'memory_usage', 'label': '메모리 사용률'}
-                    ]},
-                    {'name': 'threshold', 'type': 'number', 'label': '임계값', 'required': True, 'min': 0, 'max': 100},
-                    {'name': 'action_script', 'type': 'text', 'label': '실행 스크립트', 'required': True}
-                ],
-                '자동화 스크립트 실행': [
-                    {'name': 'script_name', 'type': 'text', 'label': '스크립트 이름', 'required': True},
-                    {'name': 'schedule', 'type': 'select', 'label': '실행 일정', 'required': True, 'options': [
-                        {'value': 'now', 'label': '즉시 실행'},
-                        {'value': 'hourly', 'label': '매시간'},
-                        {'value': 'daily', 'label': '매일'},
-                        {'value': 'weekly', 'label': '매주'}
-                    ]}
-                ]
-            }
-        }
+        logger.info(f"파라미터 요청: task_type={task_type}, feature={feature}, subtask={subtask}, config_mode={config_mode}")
         
-        logger.info(f"파라미터 목록 조회 요청: {task_type}/{subtask}")
+        # LAYER2 작업에 대한 파라미터 정의
+        if task_type == 'LAYER2':
+            if feature == 'Link-Aggregation(Manual)':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'group_number', 'type': 'number', 'label': '그룹 번호', 'required': True},
+                        {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True},
+                        {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True, 
+                         'options': [{'value': 'active', 'label': 'Active'}, {'value': 'passive', 'label': 'Passive'}]}
+                    ])
+            elif feature == 'VLAN':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True},
+                        {'name': 'vlan_name', 'type': 'text', 'label': 'VLAN 이름', 'required': True},
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True},
+                        {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True,
+                         'options': [{'value': 'access', 'label': 'Access'}, {'value': 'trunk', 'label': 'Trunk'}]}
+                    ])
+            elif feature == 'Spanning-tree':
+                if subtask == 'config':
+                    if configMode == 'config(RSTP)':
+                        return jsonify([
+                            {'name': 'priority', 'type': 'number', 'label': '브리지 우선순위', 'required': True},
+                            {'name': 'forward_time', 'type': 'number', 'label': 'Forward Time', 'required': False},
+                            {'name': 'max_age', 'type': 'number', 'label': 'Max Age', 'required': False}
+                        ])
+                    elif configMode == 'config(PVST+)':
+                        return jsonify([
+                            {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True},
+                            {'name': 'priority', 'type': 'number', 'label': '브리지 우선순위', 'required': True},
+                            {'name': 'forward_time', 'type': 'number', 'label': 'Forward Time', 'required': False}
+                        ])
         
-        if task_type not in parameters or subtask not in parameters[task_type]:
-            logger.warning(f"잘못된 작업 유형 또는 상세 작업: {task_type}/{subtask}")
-            return jsonify({'error': '잘못된 작업 유형 또는 상세 작업입니다'}), 400
-            
-        return jsonify(parameters[task_type][subtask])
+        logger.warning(f"지원되지 않는 파라미터 요청: {task_type}/{feature}/{subtask}/{config_mode}")
+        return jsonify([])
+        
     except Exception as e:
-        logger.error(f'파라미터 목록 조회 중 오류 발생: {str(e)}')
-        return jsonify({'error': '파라미터 목록을 불러오는데 실패했습니다'}), 500
+        logger.error(f"파라미터 조회 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/execute', methods=['POST'])
+def execute_task():
+    """작업을 실행하고 결과를 반환합니다."""
+    try:
+        data = request.get_json()
+        task_type = data.get('task_type')
+        feature = data.get('feature')
+        subtask = data.get('subtask')
+        config_mode = data.get('config_mode')
+        parameters = data.get('parameters', {})
+        
+        logger.info(f"작업 실행 요청: task_type={task_type}, feature={feature}, subtask={subtask}, config_mode={config_mode}")
+        logger.debug(f"파라미터: {parameters}")
+        
+        # LAYER2 작업 처리
+        if task_type == 'LAYER2':
+            commands = []
+            
+            if feature == 'Link-Aggregation(Manual)':
+                if subtask == 'config':
+                    commands = [
+                        'configure terminal',
+                        f'link-aggregation {parameters["group_number"]} mode manual',
+                        f'interface {parameters["interface_list"]}',
+                        f'link-aggregation {parameters["group_number"]} {parameters["mode"]}',
+                        'end'
+                    ]
+            elif feature == 'VLAN':
+                if subtask == 'config':
+                    commands = [
+                        'configure terminal',
+                        f'vlan {parameters["vlan_id"]}',
+                        f'name {parameters["vlan_name"]}',
+                        'exit',
+                        f'interface {parameters["interface"]}',
+                        f'switchport mode {parameters["mode"]}',
+                        'switchport access vlan {parameters["vlan_id"]}' if parameters["mode"] == 'access' else 'switchport trunk allowed vlan add {parameters["vlan_id"]}',
+                        'end'
+                    ]
+            elif feature == 'Spanning-tree':
+                if subtask == 'config':
+                    if config_mode == 'config(RSTP)':
+                        commands = [
+                            'configure terminal',
+                            'spanning-tree mode rapid-pvst',
+                            f'spanning-tree bridge priority {parameters["priority"]}',
+                        ]
+                        if 'forward_time' in parameters:
+                            commands.append(f'spanning-tree forward-time {parameters["forward_time"]}')
+                        if 'max_age' in parameters:
+                            commands.append(f'spanning-tree max-age {parameters["max_age"]}')
+                        commands.append('end')
+                    elif config_mode == 'config(PVST+)':
+                        commands = [
+                            'configure terminal',
+                            'spanning-tree mode pvst',
+                            f'spanning-tree vlan {parameters["vlan_id"]} priority {parameters["priority"]}',
+                        ]
+                        if 'forward_time' in parameters:
+                            commands.append(f'spanning-tree vlan {parameters["vlan_id"]} forward-time {parameters["forward_time"]}')
+                        commands.append('end')
+            
+            if commands:
+                logger.info(f"생성된 명령어: {commands}")
+                return jsonify({'output': '\n'.join(commands)})
+            else:
+                logger.warning("생성된 명령어가 없습니다.")
+                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
+        
+        logger.warning(f"지원되지 않는 작업 유형: {task_type}")
+        return jsonify({'error': '지원되지 않는 작업 유형입니다.'}), 400
+        
+    except Exception as e:
+        logger.error(f"작업 실행 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/tasks', methods=['GET'])
 def get_tasks():

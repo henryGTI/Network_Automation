@@ -54,13 +54,159 @@ class ConfigService:
             return self.tasks.get(str(device_id), [])
         return self.tasks
 
+    def get_task_parameters(self, task_type, subtask=None):
+        """작업 유형과 상세 작업에 따른 파라미터 목록을 반환합니다."""
+        try:
+            parameters = {
+                'LAYER2': {
+                    'Link-Aggregation(Manual)': {
+                        'config': {
+                            'parameters': [
+                                {'name': 'group_number', 'type': 'number', 'label': '그룹 번호', 'required': True, 'min': 1, 'max': 32},
+                                {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: gi 0/1-0/2'},
+                                {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True, 'options': [
+                                    {'value': 'manual', 'label': 'Manual'},
+                                ]}
+                            ],
+                            'commands': [
+                                'configure terminal',
+                                'link-aggregation {group_number} mode manual',
+                                'interface {interface_list}',
+                                'link-aggregation {group_number} manual',
+                                'end'
+                            ]
+                        },
+                        'check': {
+                            'parameters': [],
+                            'commands': [
+                                'show link-aggregation brief',
+                                'show link-aggregation group {group_number}'
+                            ]
+                        }
+                    },
+                    'Link-Aggregation(LACP)': {
+                        'config': {
+                            'parameters': [
+                                {'name': 'group_number', 'type': 'number', 'label': '그룹 번호', 'required': True, 'min': 1, 'max': 32},
+                                {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: gi 0/1-0/2'},
+                                {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True, 'options': [
+                                    {'value': 'active', 'label': 'Active'},
+                                    {'value': 'passive', 'label': 'Passive'}
+                                ]}
+                            ],
+                            'commands': [
+                                'configure terminal',
+                                'link-aggregation {group_number} mode lacp',
+                                'interface {interface_list}',
+                                'link-aggregation {group_number} active',
+                                'end'
+                            ]
+                        },
+                        'check': {
+                            'parameters': [],
+                            'commands': [
+                                'show link-aggregation brief',
+                                'show link-aggregation group {group_number}'
+                            ]
+                        }
+                    },
+                    'VLAN': {
+                        'config': {
+                            'parameters': [
+                                {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 2, 'max': 4094},
+                                {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: gi 0/1'},
+                                {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True, 'options': [
+                                    {'value': 'access', 'label': 'Access'},
+                                    {'value': 'trunk', 'label': 'Trunk'}
+                                ]},
+                                {'name': 'allowed_vlans', 'type': 'text', 'label': '허용 VLAN', 'required': False, 'placeholder': '예: 10-15'}
+                            ],
+                            'commands': [
+                                'configure terminal',
+                                'vlan {vlan_id}',
+                                'interface {interface}',
+                                'switchport mode {mode}',
+                                'switchport access vlan {vlan_id}',
+                                'switchport trunk allowed vlan add {allowed_vlans}',
+                                'end'
+                            ]
+                        },
+                        'check': {
+                            'parameters': [],
+                            'commands': [
+                                'show vlan',
+                                'show interface {interface} vlan status'
+                            ]
+                        }
+                    },
+                    'Spanning-tree': {
+                        'config(RSTP)': {
+                            'parameters': [
+                                {'name': 'mode', 'type': 'select', 'label': 'STP 모드', 'required': True, 'options': [
+                                    {'value': 'rstp', 'label': 'RSTP'}
+                                ]},
+                                {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'min': 0, 'max': 32768}
+                            ],
+                            'commands': [
+                                'configure terminal',
+                                'spanning-tree mode rstp',
+                                'spanning-tree enable',
+                                'spanning-tree mst instance 0 priority {priority}',
+                                'end'
+                            ]
+                        },
+                        'config(PVST+)': {
+                            'parameters': [
+                                {'name': 'mode', 'type': 'select', 'label': 'STP 모드', 'required': True, 'options': [
+                                    {'value': 'rapid-vst', 'label': 'Rapid-VST'}
+                                ]},
+                                {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True, 'min': 1, 'max': 4094},
+                                {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'min': 0, 'max': 32768}
+                            ],
+                            'commands': [
+                                'configure terminal',
+                                'spanning-tree mode rapid-vst',
+                                'spanning-tree enable',
+                                'spanning-tree vlan {vlan_id} priority {priority}',
+                                'end'
+                            ]
+                        },
+                        'check': {
+                            'parameters': [],
+                            'commands': [
+                                'show spanning-tree',
+                                'show spanning-tree detail',
+                                'show spanning-tree bpdu statistics'
+                            ]
+                        }
+                    }
+                }
+            }
+
+            # 작업 유형과 하위 작업이 모두 존재하는지 확인
+            if task_type not in parameters:
+                logger.warning(f"지원하지 않는 작업 유형: {task_type}")
+                return []
+            
+            if subtask not in parameters[task_type]:
+                logger.warning(f"지원하지 않는 하위 작업: {task_type}/{subtask}")
+                return []
+            
+            return parameters[task_type][subtask]
+        except Exception as e:
+            logger.error(f"파라미터 로드 중 오류 발생: {str(e)}")
+            return []
+
     def get_task_types(self):
         """작업 유형 목록 조회"""
-        return ConfigTask.get_task_types()
+        return list(self.get_task_parameters("", "").keys())
 
     def get_subtasks(self, task_type):
         """작업 유형별 하위 작업 목록 조회"""
-        return ConfigTask.get_subtasks(task_type)
+        task_parameters = self.get_task_parameters("", "")
+        if task_type in task_parameters:
+            return list(task_parameters[task_type].keys())
+        return []
 
     def update_task_status(self, device_id, task_index, status, result=None, error=None):
         """작업 상태 업데이트"""
@@ -116,6 +262,40 @@ class ConfigService:
         try:
             logger.info(f"스크립트 생성 시작: 장비={device_id}, 벤더={vendor}, 작업={task_types}")
             
+            # 라우팅 설정 파라미터 검증
+            if '라우팅 설정' in task_types:
+                current_subtask = subtask_type.get('라우팅 설정')
+                if current_subtask == 'OSPF 설정':
+                    required_params = ['process_id', 'network_address', 'wildcard_mask', 'area_id']
+                    template_key = 'ospf'
+                elif current_subtask == '정적 라우팅 설정':
+                    required_params = ['network_address', 'subnet_mask', 'next_hop']
+                    template_key = 'static'
+                else:
+                    raise ValueError(f"지원하지 않는 라우팅 설정 유형입니다: {current_subtask}")
+
+                task_params = parameters.get('라우팅 설정', {})
+                for param in required_params:
+                    if param not in task_params:
+                        raise ValueError(f"라우팅 설정에 필요한 파라미터가 누락되었습니다: {param}")
+                
+                if current_subtask == 'OSPF 설정':
+                    # process_id 검증
+                    try:
+                        process_id = int(task_params['process_id'])
+                        if not (1 <= process_id <= 65535):
+                            raise ValueError
+                    except ValueError:
+                        raise ValueError("프로세스 ID는 1-65535 사이의 숫자여야 합니다.")
+                    
+                    # area_id 검증
+                    try:
+                        area_id = int(task_params['area_id'])
+                        if not (0 <= area_id <= 4294967295):
+                            raise ValueError
+                    except ValueError:
+                        raise ValueError("OSPF Area ID는 0-4294967295 사이의 숫자여야 합니다.")
+
             # 벤더별 명령어 템플릿 정의
             templates = {
                 'cisco': {
@@ -160,12 +340,19 @@ class ConfigService:
                     },
                     'routing_config': {
                         'name': '라우팅 설정',
-                        'template': [
-                            'configure terminal',
-                            'router {protocol} {process_id}',
-                            'network {network_address} {wildcard_mask} area {area_id}',
-                            'exit'
-                        ]
+                        'template': {
+                            'ospf': [
+                                'configure terminal',
+                                'router ospf {process_id}',
+                                'network {network_address} {wildcard_mask} area {area_id}',
+                                'exit'
+                            ],
+                            'static': [
+                                'configure terminal',
+                                'ip route {network_address} {subnet_mask} {next_hop}',
+                                'exit'
+                            ]
+                        }
                     },
                     'acl_config': {
                         'name': 'ACL 설정',
@@ -237,12 +424,45 @@ class ConfigService:
                 'NTP 설정': 'ntp_config'
             }
             
-            # 상세 작업과 템플릿 키 간의 매핑 추가
+            # 상세 작업과 템플릿 키 간의 매핑
             subtask_to_template = {
+                'VLAN 관리': {
+                    'VLAN 생성': 'vlan_config',
+                    'VLAN 삭제': 'vlan_config',
+                    'VLAN 이름 설정': 'vlan_config'
+                },
                 '포트 설정': {
+                    '포트 IP추가': 'ip_config',
+                    '포트 활성화': 'interface_config',
+                    '포트 비활성화': 'interface_config',
+                    '포트 속도 설정': 'interface_config',
                     '액세스 모드 설정': 'vlan_interface',
-                    '트렁크 모드 설정': 'vlan_interface',
-                    '포트 IP추가': 'ip_config'
+                    '트렁크 모드 설정': 'vlan_interface'
+                },
+                '라우팅 설정': {
+                    'OSPF 설정': 'routing_config',
+                    '정적 라우팅 설정': 'routing_config'
+                }
+            }
+
+            # 작업 유형별 필수 파라미터 정의
+            required_parameters = {
+                'VLAN 관리': {
+                    'VLAN 생성': ['vlan_id', 'vlan_name'],
+                    'VLAN 삭제': ['vlan_id'],
+                    'VLAN 이름 설정': ['vlan_id', 'vlan_name']
+                },
+                '포트 설정': {
+                    '포트 IP추가': ['interface_name', 'ip_address', 'subnet_mask'],
+                    '포트 활성화': ['interface_name'],
+                    '포트 비활성화': ['interface_name'],
+                    '포트 속도 설정': ['interface_name', 'speed', 'duplex'],
+                    '액세스 모드 설정': ['interface_name', 'vlan_id'],
+                    '트렁크 모드 설정': ['interface_name', 'allowed_vlans']
+                },
+                '라우팅 설정': {
+                    'OSPF 설정': ['process_id', 'network_address', 'wildcard_mask', 'area_id'],
+                    '정적 라우팅 설정': ['network_address', 'subnet_mask', 'next_hop']
                 }
             }
             
@@ -261,75 +481,58 @@ class ConfigService:
             
             # 각 작업 유형별로 스크립트 생성
             for task_type in task_types:
-                subtask = subtask_type.get(task_type)
+                current_subtask = subtask_type.get(task_type)
                 task_params = parameters.get(task_type, {})
                 
+                # 필수 파라미터 검증
+                if task_type in required_parameters and current_subtask in required_parameters[task_type]:
+                    required_params = required_parameters[task_type][current_subtask]
+                    for param in required_params:
+                        if param not in task_params:
+                            raise ValueError(f"{task_type} - {current_subtask}에 필요한 파라미터가 누락되었습니다: {param}")
+                
                 # 작업 유형에 해당하는 템플릿 키 찾기
-                template_key = task_type_to_template.get(task_type)
+                template_key = None
                 
                 # 상세 작업이 특별한 템플릿을 사용하는지 확인
-                subtask_templates = subtask_to_template.get(task_type, {})
-                if subtask in subtask_templates:
-                    template_key = subtask_templates[subtask]
-                
-                if template_key and template_key in vendor_templates:
-                    template_data = vendor_templates[template_key]
-                    script_lines.append(f"! {task_type} - {subtask}")
-                    
-                    # 템플릿에 파라미터 적용
-                    for cmd_template in template_data['template']:
-                        try:
-                            # 템플릿 문자열에서 필요한 파라미터 추출
-                            required_params = []
-                            import re
-                            pattern = r'{(\w+)}'
-                            matches = re.findall(pattern, cmd_template)
-                            for match in matches:
-                                required_params.append(match)
-                            
-                            # 필요한 파라미터가 없으면 기본값 설정 또는 경고 메시지 추가
-                            param_values = {}
-                            for param in required_params:
-                                if param in task_params:
-                                    param_values[param] = task_params[param]
-                                else:
-                                    # 기본값 설정 (특정 파라미터에 따라 다르게 처리)
-                                    if param == 'interface_status':
-                                        param_values[param] = 'no shutdown'
-                                        logger.warning(f"'{param}' 파라미터 기본값 사용: 'no shutdown'")
-                                    elif param == 'mode':
-                                        if '액세스' in subtask:
-                                            param_values[param] = 'access'
-                                            logger.warning(f"'{param}' 파라미터 기본값 사용: 'access'")
-                                        elif '트렁크' in subtask:
-                                            param_values[param] = 'trunk'
-                                            logger.warning(f"'{param}' 파라미터 기본값 사용: 'trunk'")
-                                    elif param == 'interface_desc':
-                                        param_values[param] = f'Configured by Network Automation Tool'
-                                        logger.warning(f"'{param}' 파라미터 기본값 사용: 'Configured by Network Automation Tool'")
-                                    else:
-                                        script_lines.append(f"! 주의: '{param}' 파라미터가 필요합니다")
-                                        logger.warning(f"필수 파라미터 누락: '{param}'")
-                            
-                            # 모든 필수 파라미터가 있으면 명령어 생성
-                            if all(param in param_values for param in required_params):
-                                cmd = cmd_template.format(**param_values)
-                                script_lines.append(cmd)
-                            else:
-                                # 누락된 파라미터가 있는 경우
-                                missing_params = [p for p in required_params if p not in param_values]
-                                for p in missing_params:
-                                    script_lines.append(f"! 주의: '{p}' 파라미터가 필요합니다")
-                        except Exception as e:
-                            # 기타 오류 처리
-                            logger.warning(f"스크립트 생성 중 오류: {e}")
-                            script_lines.append(f"! 오류: {str(e)}")
-                    
-                    script_lines.append("!")
+                if task_type in subtask_to_template and current_subtask in subtask_to_template[task_type]:
+                    template_key = subtask_to_template[task_type][current_subtask]
                 else:
-                    script_lines.append(f"! {task_type} - {subtask}")
-                    script_lines.append(f"! 주의: '{task_type}'에 대한 템플릿이 없습니다")
-                    script_lines.append("!")
+                    template_key = task_type_to_template.get(task_type)
+                
+                if not template_key:
+                    logger.warning(f"템플릿을 찾을 수 없습니다: {task_type}/{current_subtask}")
+                    continue
+
+                # 벤더별 템플릿 확인
+                template_data = vendor_templates.get(template_key)
+                
+                if not template_data:
+                    logger.warning(f"벤더 {vendor}에 대한 템플릿을 찾을 수 없습니다: {template_key}")
+                    continue
+
+                script_lines.append(f"! {task_type} - {current_subtask}")
+                
+                # 라우팅 설정의 경우 템플릿 선택
+                if task_type == '라우팅 설정':
+                    if current_subtask == 'OSPF 설정':
+                        template = template_data['template']['ospf']
+                    elif current_subtask == '정적 라우팅 설정':
+                        template = template_data['template']['static']
+                    else:
+                        continue
+                else:
+                    template = template_data['template']
+                
+                # 템플릿에 파라미터 적용
+                for cmd_template in template:
+                    try:
+                        cmd = cmd_template.format(**task_params)
+                        script_lines.append(cmd)
+                    except KeyError as e:
+                        script_lines.append(f"! 주의: '{e.args[0]}' 파라미터가 필요합니다")
+                
+                script_lines.append("!")
             
             script_content = "\n".join(script_lines)
             logger.info("스크립트 생성 완료")
@@ -401,70 +604,6 @@ class ConfigService:
         except Exception as e:
             logger.error(f"스크립트 실행 중 오류: {str(e)}")
             raise ValueError(f"스크립트 실행 실패: {str(e)}")
-
-    def get_task_parameters(self, task_type, subtask):
-        """작업 유형별 필요한 파라미터 정보 반환"""
-        parameters = {
-            'vlan': {
-                'create': ['vlan_id', 'vlan_name'],
-                'delete': ['vlan_id'],
-                'interface_assign': ['interface', 'vlan_id'],
-                'trunk': ['interface', 'allowed_vlans']
-            },
-            'port': {
-                'mode': ['interface', 'mode', 'vlan_id'],
-                'speed': ['interface', 'speed', 'duplex'],
-                'status': ['interface', 'status']
-            },
-            'routing': {
-                'static': ['network', 'mask', 'next_hop'],
-                'ospf': ['process_id', 'network', 'area'],
-                'eigrp': ['as_number', 'network'],
-                'bgp': ['as_number', 'neighbor', 'remote_as']
-            },
-            'security': {
-                'port_security': ['interface', 'max_mac', 'violation'],
-                'ssh': ['version', 'timeout', 'authentication'],
-                'aaa': ['method', 'server_group', 'service'],
-                'acl': ['name', 'type', 'entries']
-            },
-            'stp_lacp': {
-                'stp': ['mode', 'priority'],
-                'lacp': ['channel_group', 'interfaces', 'mode']
-            },
-            'qos': {
-                'policy': ['policy_name', 'class_map', 'actions'],
-                'rate_limit': ['interface', 'rate', 'burst'],
-                'service_policy': ['interface', 'policy_name', 'direction']
-            },
-            'monitoring': {
-                'route': [],
-                'ospf': [],
-                'bgp': []
-            },
-            'status': {
-                'interface': ['interface'],
-                'traffic': ['interface']
-            },
-            'logging': {
-                'show': []
-            },
-            'backup': {
-                'backup': ['filename'],
-                'restore': ['filename'],
-                'tftp': ['server', 'filename']
-            },
-            'snmp': {
-                'setup': ['community', 'version', 'access'],
-                'discovery': ['protocol']
-            },
-            'automation': {
-                'deploy': ['config_file', 'devices'],
-                'verify': ['condition', 'action']
-            }
-        }
-        
-        return parameters.get(task_type, {}).get(subtask, [])
 
 class ConfigManager:
     def __init__(self):

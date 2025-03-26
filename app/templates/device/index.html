@@ -147,7 +147,7 @@ function updateDeviceTable(devices) {
                     <td>${device.ip_address}</td>
                     <td>${device.vendor}</td>
                     <td>${device.device_type}</td>
-                    <td><span class="badge ${getStatusBadgeClass(device.status)}">${device.status}</span></td>
+                    <td><span class="badge bg-secondary">${device.ip_address}</span></td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editDevice(${device.id})">수정</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteDevice(${device.id})">삭제</button>
