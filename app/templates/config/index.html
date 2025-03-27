@@ -84,22 +84,61 @@ async function loadFeatures() {
     subtaskSelect.disabled = true;
     configModeSelect.disabled = true;
     
-    // LAYER2의 경우
+    let features = [];
+    
     if (taskType === 'LAYER2') {
-        const features = [
+        features = [
             'Link-Aggregation (Manual)',
             'Link-Aggregation (LACP)',
             'VLAN',
             'Spanning-tree'
         ];
-        
-        features.forEach(feature => {
-            const option = document.createElement('option');
-            option.value = feature;
-            option.textContent = feature;
-            featureSelect.appendChild(option);
-        });
+    } else if (taskType === '시스템관리') {
+        features = [
+            'Hostname',
+            'User',
+            'Enable Password',
+            'IP Address',
+            'Gateway',
+            'NTP',
+            'Clock',
+            'Remote Sysloging',
+            'Telnet',
+            'SSH',
+            'Firmware Upgrade'
+        ];
+    } else if (taskType === '네트워크관리') {
+        features = [
+            'SNMP',
+            'SNMP trap',
+            'SNMPv3',
+            'Port Mirroring',
+            'LLDP',
+            'Loopback'
+        ];
+    } else if (taskType === 'QoS') {
+        features = [
+            'rate-limit'
+        ];
+    } else if (taskType === '보안') {
+        features = [
+            'DHCP snooping',
+            'DAI',
+            'ACL (Standard)',
+            'ACL (Extended)'
+        ];
+    } else if (taskType === '패스워드복구') {
+        features = [
+            'Password Recovery'
+        ];
     }
+    
+    features.forEach(feature => {
+        const option = document.createElement('option');
+        option.value = feature;
+        option.textContent = feature;
+        featureSelect.appendChild(option);
+    });
     console.log("Features loaded");
 }
 

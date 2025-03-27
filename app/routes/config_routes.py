@@ -399,12 +399,199 @@ def get_subtasks(task_type):
 
 @bp.route('/api/parameters/<task_type>/<feature>/<subtask>/<config_mode>', methods=['GET'])
 def get_parameters(task_type, feature, subtask, config_mode):
-    """특정 작업에 대한 파라미터 목록을 반환합니다."""
     try:
         logger.info(f"파라미터 요청: task_type={task_type}, feature={feature}, subtask={subtask}, config_mode={config_mode}")
         
-        # LAYER2 작업에 대한 파라미터 정의
-        if task_type == 'LAYER2':
+        # 패스워드복구 작업에 대한 파라미터 정의
+        if task_type == '패스워드복구':
+            if feature == 'Password Recovery':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'username', 'type': 'text', 'label': '새로운 root ID', 'required': True,
+                         'placeholder': '예: admin'},
+                        {'name': 'password', 'type': 'password', 'label': '새로운 root 패스워드', 'required': True}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'User':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'username', 'type': 'text', 'label': '사용자 이름', 'required': True,
+                         'placeholder': '예: admin'},
+                        {'name': 'privilege', 'type': 'number', 'label': '권한 레벨', 'required': True,
+                         'min': 1, 'max': 15, 'default': '15'},
+                        {'name': 'password', 'type': 'password', 'label': '비밀번호', 'required': True}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'Enable Password':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'password', 'type': 'password', 'label': '새로운 Enable 비밀번호', 'required': True}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+
+        # 보안 작업에 대한 파라미터 정의
+        if task_type == '보안':
+            if feature == 'DHCP snooping':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'enabled', 'type': 'select', 'label': 'DHCP snooping 활성화', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gi 0/24'},
+                        {'name': 'trust', 'type': 'select', 'label': 'Trust 포트 설정', 'required': True,
+                         'options': [{'value': 'trust', 'label': 'Trust'}, {'value': 'untrust', 'label': 'Untrust'}]}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'DAI':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gi 0/1-0/22'},
+                        {'name': 'enabled', 'type': 'select', 'label': 'DAI 활성화', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'ACL (Standard)':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'acl_number', 'type': 'number', 'label': 'ACL 번호', 'required': True,
+                         'min': 1, 'max': 1000, 'placeholder': '예: 1'},
+                        {'name': 'action', 'type': 'select', 'label': '동작', 'required': True,
+                         'options': [{'value': 'permit', 'label': 'Permit'}, {'value': 'deny', 'label': 'Deny'}]},
+                        {'name': 'source_ip', 'type': 'text', 'label': '출발지 IP', 'required': True,
+                         'placeholder': '예: 192.1.1.1'},
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gi 0/1'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'ACL (Extended)':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'acl_number', 'type': 'number', 'label': 'ACL 번호', 'required': True,
+                         'min': 1001, 'max': 2000, 'placeholder': '예: 1001'},
+                        {'name': 'action', 'type': 'select', 'label': '동작', 'required': True,
+                         'options': [{'value': 'permit', 'label': 'Permit'}, {'value': 'deny', 'label': 'Deny'}]},
+                        {'name': 'source_ip', 'type': 'text', 'label': '출발지 IP', 'required': True,
+                         'placeholder': '예: 192.1.1.2'},
+                        {'name': 'destination_ip', 'type': 'text', 'label': '목적지 IP', 'required': True,
+                         'placeholder': '예: 192.1.1.3'},
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gi 0/1'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+
+        # QoS 작업에 대한 파라미터 정의
+        if task_type == 'QoS':
+            if feature == 'rate-limit':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gi 0/1'},
+                        {'name': 'kbps', 'type': 'number', 'label': '대역폭 (kbps)', 'required': True,
+                         'placeholder': '예: 6560'},
+                        {'name': 'burst', 'type': 'number', 'label': 'Burst Size', 'required': True,
+                         'placeholder': '예: 8192'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+
+        # 네트워크관리 작업에 대한 파라미터 정의
+        if task_type == '네트워크관리':
+            if feature == 'SNMP':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'enabled', 'type': 'select', 'label': 'SNMP 활성화', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
+                        {'name': 'community', 'type': 'text', 'label': 'Community 문자열', 'required': True,
+                         'placeholder': '예: test ro'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'SNMP trap':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'host', 'type': 'text', 'label': '트랩 서버 IP', 'required': True,
+                         'placeholder': '예: 192.168.1.100'},
+                        {'name': 'community', 'type': 'text', 'label': 'Community 문자열', 'required': True,
+                         'placeholder': '예: test'},
+                        {'name': 'version', 'type': 'select', 'label': 'SNMP 버전', 'required': True,
+                         'options': [{'value': '2c', 'label': 'v2c'}]}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'SNMPv3':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'group_name', 'type': 'text', 'label': '그룹 이름', 'required': True,
+                         'placeholder': '예: team'},
+                        {'name': 'security_level', 'type': 'select', 'label': '보안 레벨', 'required': True,
+                         'options': [{'value': 'v3 authpriv', 'label': 'authpriv'}, {'value': 'v3 auth', 'label': 'auth'}]},
+                        {'name': 'username', 'type': 'text', 'label': '사용자 이름', 'required': True,
+                         'placeholder': '예: admin'},
+                        {'name': 'auth_password', 'type': 'password', 'label': '인증 비밀번호', 'required': True}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'Port Mirroring':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'session_id', 'type': 'number', 'label': '세션 ID', 'required': True,
+                         'min': 1, 'max': 4},
+                        {'name': 'source_interface', 'type': 'text', 'label': '소스 인터페이스', 'required': True,
+                         'placeholder': '예: gigabitethernet 0/1'},
+                        {'name': 'destination_interface', 'type': 'text', 'label': '목적지 인터페이스', 'required': True,
+                         'placeholder': '예: gigabitethernet 0/23'},
+                        {'name': 'direction', 'type': 'select', 'label': '모니터링 방향', 'required': True,
+                         'options': [{'value': 'both', 'label': '양방향'}, {'value': 'rx', 'label': '수신만'}, {'value': 'tx', 'label': '송신만'}]}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'LLDP':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gigabitethernet 0/1'},
+                        {'name': 'enabled', 'type': 'select', 'label': 'LLDP 활성화', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
+                        {'name': 'receive', 'type': 'select', 'label': 'LLDP 수신', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
+                        {'name': 'transmit', 'type': 'select', 'label': 'LLDP 송신', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+                    
+            elif feature == 'Loopback':
+                if subtask == 'config':
+                    return jsonify([
+                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
+                         'placeholder': '예: gigabitethernet 0/1'},
+                        {'name': 'enabled', 'type': 'select', 'label': 'Loopback-detection 활성화', 'required': True,
+                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
+                        {'name': 'interval', 'type': 'number', 'label': '검출 간격(초)', 'required': True,
+                         'min': 1, 'max': 60, 'default': '10'}
+                    ])
+                elif subtask == 'check':
+                    return jsonify([])
+
+        # LAYER2 작업에 대한 기존 파라미터 정의
+        elif task_type == 'LAYER2':
             if feature == 'Link-Aggregation (Manual)':
                 if subtask == 'config':
                     return jsonify([
@@ -413,7 +600,8 @@ def get_parameters(task_type, feature, subtask, config_mode):
                     ])
                 elif subtask == 'check':
                     return jsonify([
-                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': False, 'default': '1'}
+                        'show link-aggregation brief',
+                        f'show link-aggregation group {parameters.get("group_id", "1")}'
                     ])
             elif feature == 'Link-Aggregation (LACP)':
                 if subtask == 'config':
@@ -423,7 +611,8 @@ def get_parameters(task_type, feature, subtask, config_mode):
                     ])
                 elif subtask == 'check':
                     return jsonify([
-                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': False, 'default': '1'}
+                        'show link-aggregation brief',
+                        f'show link-aggregation group {parameters.get("group_id", "1")}'
                     ])
             elif feature == 'VLAN':
                 if subtask == 'config':
@@ -435,7 +624,8 @@ def get_parameters(task_type, feature, subtask, config_mode):
                     ])
                 elif subtask == 'check':
                     return jsonify([
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': False, 'placeholder': '예: gi 0/1'}
+                        'show vlan',
+                        f'show interface {parameters["interface"]} vlan status'
                     ])
             elif feature == 'Spanning-tree':
                 if subtask == 'config':
@@ -450,7 +640,7 @@ def get_parameters(task_type, feature, subtask, config_mode):
                             {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'default': '32768'}
                         ])
                 elif subtask == 'check':
-                    return jsonify([])  # check 명령어는 파라미터가 필요 없음
+                    return jsonify([])
         
         logger.warning(f"지원되지 않는 파라미터 요청: {task_type}/{feature}/{subtask}/{config_mode}")
         return jsonify([])
@@ -461,7 +651,6 @@ def get_parameters(task_type, feature, subtask, config_mode):
 
 @bp.route('/api/execute', methods=['POST'])
 def execute_task():
-    """작업을 실행하고 결과를 반환합니다."""
     try:
         data = request.get_json()
         logger.info("=== 실행 요청 데이터 ===")
@@ -471,10 +660,10 @@ def execute_task():
             logger.error("요청 데이터가 없습니다.")
             return jsonify({'error': '요청 데이터가 없습니다.'}), 400
             
-        task_type = data.get('taskType')  # taskType으로 변경
+        task_type = data.get('taskType')
         feature = data.get('feature')
         subtask = data.get('subtask')
-        config_mode = data.get('configMode')  # configMode로 변경
+        config_mode = data.get('configMode')
         parameters = data.get('parameters', {})
         
         logger.info(f"Task Type: {task_type}")
@@ -483,17 +672,250 @@ def execute_task():
         logger.info(f"Config Mode: {config_mode}")
         logger.info(f"Parameters: {parameters}")
         
-        # 필수 필드 검증
-        if not all([task_type, feature, subtask]):
-            missing_fields = []
-            if not task_type: missing_fields.append('taskType')
-            if not feature: missing_fields.append('feature')
-            if not subtask: missing_fields.append('subtask')
-            logger.error(f"필수 필드 누락: {', '.join(missing_fields)}")
-            return jsonify({'error': f"다음 필수 항목이 누락되었습니다: {', '.join(missing_fields)}"}), 400
+        # 패스워드복구 작업 처리
+        if task_type == '패스워드복구':
+            commands = []
+            
+            if feature == 'Password Recovery':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['username', 'password']):
+                        return jsonify({'error': '사용자 이름과 비밀번호가 필요합니다.'}), 400
+                    commands = [
+                        'boot system flash:/IOS-XE-64.bin',
+                        'rommon>boot',
+                        'rommon>confreg 0x2142',
+                        'rommon>reset',
+                        'configure terminal',
+                        f'username {parameters["username"]} privilege 15 password {parameters["password"]}',
+                        'config-register 0x2102',
+                        'end',
+                        'write memory',
+                        'reload'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show version',
+                        'show running-config | include username'
+                    ]
+            
+            if commands:
+                result = {'output': '\n'.join(commands)}
+                logger.info(f"반환할 결과: {result}")
+                return jsonify(result)
+            else:
+                logger.warning("생성된 명령어가 없습니다.")
+                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
         
-        # LAYER2 작업 처리
-        if task_type == 'LAYER2':
+        # 보안 작업 처리
+        elif task_type == '보안':
+            commands = []
+            
+            if feature == 'DHCP snooping':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['enabled', 'interface', 'trust']):
+                        return jsonify({'error': 'DHCP snooping 활성화 여부, 인터페이스, Trust 포트 설정이 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        'dhcp-snooping',
+                        f'interface {parameters["interface"]}',
+                        f'dhcp-snooping trust',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show dhcp-snooping database',
+                        'show dhcp-snooping packet statistics',
+                        'clear dhcp-snooping database',
+                        'clear dhcp-snooping packet statistics'
+                    ]
+            
+            elif feature == 'DAI':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['interface', 'enabled']):
+                        return jsonify({'error': '인터페이스와 DAI 활성화 여부가 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'interface {parameters["interface"]}',
+                        'ip arp inspection',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show ip arp inspection',
+                        'show ip arp inspection log-information'
+                    ]
+            
+            elif feature == 'ACL (Standard)':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['acl_number', 'action', 'source_ip', 'interface']):
+                        return jsonify({'error': 'ACL 번호, 동작, 출발지 IP, 인터페이스가 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'access-list {parameters["acl_number"]} {parameters["action"]} host {parameters["source_ip"]}',
+                        f'interface {parameters["interface"]}',
+                        f'ip access-group {parameters["acl_number"]} in',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = ['show access-list']
+            
+            elif feature == 'ACL (Extended)':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['acl_number', 'action', 'source_ip', 'destination_ip', 'interface']):
+                        return jsonify({'error': 'ACL 번호, 동작, 출발지 IP, 목적지 IP, 인터페이스가 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'access-list {parameters["acl_number"]} {parameters["action"]} tcp host {parameters["source_ip"]} host {parameters["destination_ip"]} eq 3001',
+                        f'interface {parameters["interface"]}',
+                        f'ip access-group {parameters["acl_number"]} in',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = ['show access-list']
+            
+            if commands:
+                result = {'output': '\n'.join(commands)}
+                logger.info(f"반환할 결과: {result}")
+                return jsonify(result)
+            else:
+                logger.warning("생성된 명령어가 없습니다.")
+                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
+        
+        # QoS 작업 처리
+        elif task_type == 'QoS':
+            commands = []
+            
+            if feature == 'rate-limit':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['interface', 'kbps', 'burst']):
+                        return jsonify({'error': '인터페이스, 대역폭, Burst Size가 모두 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'interface {parameters["interface"]}',
+                        f'rate-limit default {parameters["kbps"]} {parameters["burst"]}',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show rate-limit',
+                        'show run'
+                    ]
+            
+            if commands:
+                result = {'output': '\n'.join(commands)}
+                logger.info(f"반환할 결과: {result}")
+                return jsonify(result)
+            else:
+                logger.warning("생성된 명령어가 없습니다.")
+                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
+        
+        # 네트워크관리 작업 처리
+        elif task_type == '네트워크관리':
+            commands = []
+            
+            if feature == 'SNMP':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['enabled', 'community']):
+                        return jsonify({'error': 'SNMP 활성화 여부와 Community 문자열이 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        'snmp-server start',
+                        f'snmp-server community {parameters["community"]}',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show snmp-server',
+                        'show snmp community'
+                    ]
+            
+            elif feature == 'SNMP trap':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['host', 'community', 'version']):
+                        return jsonify({'error': '트랩 서버 IP, Community 문자열, SNMP 버전이 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'snmp-server host {parameters["host"]} traps community {parameters["community"]}',
+                        'snmp-server enable traps',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = ['show snmp-server host']
+            
+            elif feature == 'SNMPv3':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['group_name', 'security_level', 'username', 'auth_password']):
+                        return jsonify({'error': '그룹 이름, 보안 레벨, 사용자 이름, 인증 비밀번호가 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'snmp-server group {parameters["group_name"]} {parameters["security_level"]} read default',
+                        f'snmp-server user {parameters["username"]} {parameters["group_name"]} {parameters["security_level"]} auth sha {parameters["auth_password"]} encrypt des coredge123',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show snmp-server view',
+                        'show snmp-server group',
+                        'show snmp-server user'
+                    ]
+            
+            elif feature == 'Port Mirroring':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['session_id', 'source_interface', 'destination_interface', 'direction']):
+                        return jsonify({'error': '세션 ID, 소스 인터페이스, 목적지 인터페이스, 모니터링 방향이 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        f'monitor session {parameters["session_id"]} source interface {parameters["source_interface"]} {parameters["direction"]}',
+                        f'monitor session {parameters["session_id"]} destination interface {parameters["destination_interface"]}',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = ['show monitor session all']
+            
+            elif feature == 'LLDP':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['interface', 'enabled', 'receive', 'transmit']):
+                        return jsonify({'error': '인터페이스, LLDP 활성화 여부, 수신/송신 설정이 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        'lldp run',
+                        f'interface {parameters["interface"]}',
+                        f'lldp {parameters["enabled"]}',
+                        f'lldp receive {parameters["receive"]}',
+                        f'lldp transmit {parameters["transmit"]}',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = [
+                        'show lldp',
+                        'show lldp neighbors'
+                    ]
+            
+            elif feature == 'Loopback':
+                if subtask == 'config':
+                    if not all(key in parameters for key in ['interface', 'enabled', 'interval']):
+                        return jsonify({'error': '인터페이스, Loopback-detection 활성화 여부, 검출 간격이 필요합니다.'}), 400
+                    commands = [
+                        'configure terminal',
+                        'loopback-detection enable',
+                        f'interface {parameters["interface"]}',
+                        f'loopback-detection {parameters["enabled"]}',
+                        f'loopback-detection interval-time {parameters["interval"]}',
+                        'end'
+                    ]
+                elif subtask == 'check':
+                    commands = ['show loopback-detection']
+            
+            if commands:
+                result = {'output': '\n'.join(commands)}
+                logger.info(f"반환할 결과: {result}")
+                return jsonify(result)
+            else:
+                logger.warning("생성된 명령어가 없습니다.")
+                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
+        
+        # LAYER2 작업 처리 (기존 코드)
+        elif task_type == 'LAYER2':
             commands = []
             
             if feature == 'Link-Aggregation (Manual)':
