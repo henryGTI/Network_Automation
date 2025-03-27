@@ -7,6 +7,8 @@ from app.routes.device_routes import device_bp
 from app.routes.learning_routes import learning_bp
 from app.routes.main_routes import main_bp
 from app.routes.config_routes import bp as config_bp
+from logging.handlers import RotatingFileHandler
+from app.config import Config
 
 # 로깅 설정
 logging.basicConfig(
@@ -32,17 +34,38 @@ def get_device_api(device_id):
     """디바이스 상세 API 라우트"""
     return jsonify({})  # 디바이스 라우트로 리다이렉션하지 않고 빈 객체 반환
 
-def create_app():
+def create_app(config_class=Config):
     app = Flask(__name__, template_folder='templates')
     CORS(app)
     
     # 설정
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///network_automation.db'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config.from_object(config_class)
     
     # 데이터베이스 초기화
     db.init_app(app)
+    
+    # 보안 헤더 설정
+    @app.after_request
+    def add_security_headers(response):
+        for header, value in app.config['SECURITY_HEADERS'].items():
+            response.headers[header] = value
+        return response
+    
+    # 로깅 설정
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    
+    file_handler = RotatingFileHandler(
+        app.config['LOG_FILE'],
+        maxBytes=app.config['LOG_MAX_SIZE'],
+        backupCount=app.config['LOG_BACKUP_COUNT']
+    )
+    file_handler.setFormatter(logging.Formatter(app.config['LOG_FORMAT']))
+    file_handler.setLevel(app.config['LOG_LEVEL'])
+    
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(app.config['LOG_LEVEL'])
+    app.logger.info('네트워크 자동화 애플리케이션 시작')
     
     # 블루프린트 등록
     app.register_blueprint(main_bp)
@@ -51,12 +74,7 @@ def create_app():
     app.register_blueprint(config_bp)  # config 블루프린트 등록
     app.register_blueprint(api_bp)  # 글로벌 API 라우트 등록
     
-    # 데이터베이스 테이블 생성
     with app.app_context():
         db.create_all()
-        logging.info('데이터베이스 테이블 생성 완료')
-    
-    # 서버 시작 로그
-    app.logger.info("서버 시작 중...")
     
     return app

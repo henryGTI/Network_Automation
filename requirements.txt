@@ -5,3 +5,8 @@ python-dotenv==1.0.1
 requests==2.31.0
 netmiko==4.3.0
 beautifulsoup4==4.12.3
+Werkzeug==3.0.1
+cryptography==42.0.5
+paramiko==3.4.0
+bcrypt==4.1.2
+pyOpenSSL==24.0.0
