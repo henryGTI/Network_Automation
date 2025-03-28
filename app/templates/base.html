@@ -5,28 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>네트워크 자동화 도구</title>
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Custom CSS -->
-    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        .card {
+            box-shadow: 0 2px 4px rgba(0,0,0,.05);
+            border: none;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid rgba(0,0,0,.125);
+        }
+        .table th {
+            background-color: #f8f9fa;
+        }
+        .btn-primary {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .btn-primary:hover {
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
+        }
+        .form-control:focus {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
+        }
+    </style>
 </head>
 <body>
     <!-- 네비게이션 바 -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">네트워크 자동화</a>
+            <a class="navbar-brand" href="/"><i class="bi bi-gear-fill me-2"></i>네트워크 자동화</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link {% if active_tab == 'device' %}active{% endif %}" href="/">장비 관리</a>
+                        <a class="nav-link {% if active_tab == 'device' %}active{% endif %}" href="/device/"><i class="bi bi-hdd-network me-1"></i>장비 관리</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if active_tab == 'config' %}active{% endif %}" href="/config">설정 작업</a>
+                        <a class="nav-link {% if active_tab == 'config' %}active{% endif %}" href="/config/"><i class="bi bi-sliders me-1"></i>설정 작업</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if active_tab == 'learning' %}active{% endif %}" href="/learning">자동학습</a>
+                        <a class="nav-link {% if active_tab == 'learning' %}active{% endif %}" href="/learning/"><i class="bi bi-book me-1"></i>자동학습</a>
                     </li>
                 </ul>
             </div>
@@ -42,6 +76,7 @@
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
         <div id="toast" class="toast" role="alert">
             <div class="toast-header">
+                <i class="bi bi-info-circle me-2"></i>
                 <strong id="toast-title" class="me-auto">알림</strong>
                 <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
             </div>
@@ -49,10 +84,8 @@
         </div>
     </div>
 
-    <!-- jQuery 추가 -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- Bootstrap JS 추가 -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Custom JS -->
     {% block scripts %}{% endblock %}
 </body>

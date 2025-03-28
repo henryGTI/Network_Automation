@@ -59,7 +59,436 @@
     </div>
 </div>
 
+<!-- 에러 모달 -->
+<div id="errorModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>오류</h2>
+        <p id="errorMessage"></p>
+        <button onclick="closeErrorModal()">확인</button>
+    </div>
+</div>
+
+<!-- 성공 모달 -->
+<div id="successModal" class="modal">
+    <div class="modal-content">
+        <span class="close-success">&times;</span>
+        <h2>성공</h2>
+        <p id="successMessage"></p>
+        <button onclick="closeSuccessModal()">확인</button>
+    </div>
+</div>
+
+<style>
+/* 에러 모달 스타일 */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 5px;
+}
+
+.close, .close-success {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover, .close-success:hover {
+    color: black;
+}
+
+/* 에러 입력 필드 스타일 */
+.error {
+    border-color: #dc3545 !important;
+}
+
+.error-message {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* 성공 메시지 스타일 */
+.success-message {
+    color: #28a745;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+</style>
+
 <script>
+// 상수 정의
+const API_BASE_URL = '/config/api';
+const PARAMETER_TYPES = {
+    TEXT: 'text',
+    NUMBER: 'number',
+    SELECT: 'select',
+    PASSWORD: 'password',
+    IP: 'ip',
+    MAC: 'mac',
+    VLAN: 'vlan',
+    INTERFACE: 'interface',
+    PRIORITY: 'priority'
+};
+
+const TASK_TYPES = {
+    SYSTEM: '시스템관리',
+    NETWORK: '네트워크관리',
+    LAYER2: 'LAYER2',
+    QOS: 'QoS',
+    SECURITY: '보안',
+    PASSWORD_RECOVERY: '패스워드복구'
+};
+
+const SUBTASK_TYPES = {
+    CONFIG: 'config',
+    CHECK: 'check'
+};
+
+const CONFIG_MODES = {
+    BASIC: '기본',
+    RSTP: 'config(RSTP)',
+    PVST: 'config(PVST+)'
+};
+
+const taskFeatures = {
+    '시스템관리': [
+        'Hostname',
+        'User',
+        'Enable Password',
+        'IP Address',
+        'Gateway',
+        'NTP',
+        'Clock',
+        'Remote Sysloging',
+        'Telnet',
+        'SSH',
+        'Firmware Upgrade'
+    ],
+    '네트워크관리': [
+        'SNMP',
+        'SNMP trap',
+        'SNMPv3',
+        'Port Mirroring',
+        'LLDP',
+        'Loopback'
+    ],
+    'LAYER2': [
+        'Link-Aggregation (Manual)',
+        'Link-Aggregation (LACP)',
+        'VLAN',
+        'Spanning-tree',
+        'Port Channel',
+        'Storm Control',
+        'Port Security',
+        'MAC Address Table'
+    ],
+    'QoS': [
+        'Rate Limit',
+        'Traffic Shaping',
+        'Traffic Policing',
+        'Queue Scheduling',
+        'CoS Mapping',
+        'DSCP Mapping'
+    ],
+    '보안': [
+        'DHCP Snooping',
+        'DAI',
+        'ACL (Standard)',
+        'ACL (Extended)',
+        'Port Security',
+        'AAA',
+        'RADIUS',
+        'TACACS+'
+    ],
+    '패스워드복구': [
+        'Password Recovery'
+    ]
+};
+
+// taskParameters 객체 수정
+const taskParameters = {
+    '시스템관리': {
+        'Hostname': {
+            'config': [
+                { name: 'hostname', label: '호스트명', type: 'text', required: true }
+            ]
+        },
+        'User': {
+            'config': [
+                { name: 'username', label: '사용자명', type: 'text', required: true },
+                { name: 'privilege', label: '권한 레벨', type: 'number', required: true, min: 0, max: 15 },
+                { name: 'password', label: '비밀번호', type: 'password', required: true }
+            ]
+        },
+        'Enable Password': {
+            'config': [
+                { name: 'password', label: 'Enable 비밀번호', type: 'password', required: true }
+            ]
+        },
+        'IP Address': {
+            'config': [
+                { name: 'interface', label: '인터페이스', type: 'text', required: true },
+                { name: 'ip_address', label: 'IP 주소', type: 'ip', required: true },
+                { name: 'subnet_mask', label: '서브넷 마스크', type: 'ip', required: true }
+            ]
+        },
+        'Gateway': {
+            'config': [
+                { name: 'gateway_ip', label: '게이트웨이 IP', type: 'ip', required: true }
+            ]
+        },
+        'NTP': {
+            'config': [
+                { name: 'server_ip', label: 'NTP 서버 IP', type: 'ip', required: true }
+            ]
+        },
+        'Clock': {
+            'config': [
+                { name: 'timezone', label: '시간대', type: 'text', required: true },
+                { name: 'datetime', label: '날짜/시간', type: 'text', required: true }
+            ]
+        },
+        'Remote Sysloging': {
+            'config': [
+                { name: 'server_ip', label: '로그 서버 IP', type: 'ip', required: true },
+                { name: 'facility', label: '로깅 시설', type: 'select', required: true,
+                  options: [
+                      { value: 'local0', label: 'Local0' },
+                      { value: 'local1', label: 'Local1' },
+                      { value: 'local2', label: 'Local2' },
+                      { value: 'local3', label: 'Local3' }
+                  ]}
+            ]
+        },
+        'Telnet': {
+            'config': [
+                { name: 'enabled', label: 'Telnet 활성화', type: 'select', required: true,
+                  options: [
+                      { value: 'enable', label: '활성화' },
+                      { value: 'disable', label: '비활성화' }
+                  ]}
+            ]
+        },
+        'SSH': {
+            'config': [
+                { name: 'enabled', label: 'SSH 활성화', type: 'select', required: true,
+                  options: [
+                      { value: 'enable', label: '활성화' },
+                      { value: 'disable', label: '비활성화' }
+                  ]},
+                { name: 'version', label: 'SSH 버전', type: 'select', required: true,
+                  options: [
+                      { value: '2', label: 'Version 2' }
+                  ]}
+            ]
+        },
+        'Firmware Upgrade': {
+            'config': [
+                { name: 'server_ip', label: 'TFTP 서버 IP', type: 'ip', required: true },
+                { name: 'filename', label: '펌웨어 파일명', type: 'text', required: true }
+            ]
+        }
+    },
+    '네트워크관리': {
+        'SNMP': {
+            'config': [
+                { name: 'community', label: '커뮤니티 문자열', type: 'text', required: true },
+                { name: 'access', label: '접근 권한', type: 'select', required: true,
+                  options: [
+                      { value: 'ro', label: '읽기 전용' },
+                      { value: 'rw', label: '읽기/쓰기' }
+                  ]}
+            ]
+        },
+        'SNMP trap': {
+            'config': [
+                { name: 'host', label: 'Trap 수신 서버', type: 'ip', required: true },
+                { name: 'community', label: '커뮤니티 문자열', type: 'text', required: true }
+            ]
+        },
+        'SNMPv3': {
+            'config': [
+                { name: 'username', label: '사용자 이름', type: 'text', required: true },
+                { name: 'auth_type', label: '인증 유형', type: 'select', required: true,
+                  options: [
+                      { value: 'md5', label: 'MD5' },
+                      { value: 'sha', label: 'SHA' }
+                  ]},
+                { name: 'auth_password', label: '인증 비밀번호', type: 'password', required: true },
+                { name: 'priv_type', label: '암호화 유형', type: 'select', required: true,
+                  options: [
+                      { value: 'des', label: 'DES' },
+                      { value: 'aes', label: 'AES' }
+                  ]},
+                { name: 'priv_password', label: '암호화 비밀번호', type: 'password', required: true }
+            ]
+        },
+        'Port Mirroring': {
+            'config': [
+                { name: 'session', label: '세션 번호', type: 'number', required: true, min: 1, max: 4 },
+                { name: 'source_interface', label: '소스 인터페이스', type: 'interface', required: true },
+                { name: 'destination_interface', label: '목적지 인터페이스', type: 'interface', required: true }
+            ]
+        },
+        'LLDP': {
+            'config': [
+                { name: 'enabled', label: 'LLDP 활성화', type: 'select', required: true,
+                  options: [
+                      { value: 'enable', label: '활성화' },
+                      { value: 'disable', label: '비활성화' }
+                  ]},
+                { name: 'interface', label: '인터페이스', type: 'interface', required: true }
+            ]
+        },
+        'Loopback': {
+            'config': [
+                { name: 'interface_number', label: '인터페이스 번호', type: 'number', required: true, min: 0, max: 100 },
+                { name: 'ip_address', label: 'IP 주소', type: 'ip', required: true },
+                { name: 'subnet_mask', label: '서브넷 마스크', type: 'ip', required: true }
+            ]
+        }
+    },
+    'LAYER2': {
+        'VLAN': {
+            'config': [
+                { name: 'vlan_id', label: 'VLAN ID', type: 'vlan', required: true },
+                { name: 'vlan_name', label: 'VLAN 이름', type: 'text', required: true }
+            ]
+        },
+        'Link-Aggregation (Manual)': {
+            'config': [
+                { name: 'group_number', label: '그룹 번호', type: 'number', required: true, min: 1, max: 8 },
+                { name: 'interfaces', label: '인터페이스 목록', type: 'text', required: true }
+            ]
+        },
+        'Link-Aggregation (LACP)': {
+            'config': [
+                { name: 'group_number', label: '그룹 번호', type: 'number', required: true, min: 1, max: 8 },
+                { name: 'interfaces', label: '인터페이스 목록', type: 'text', required: true },
+                { name: 'mode', label: 'LACP 모드', type: 'select', required: true,
+                  options: [
+                      { value: 'active', label: 'Active' },
+                      { value: 'passive', label: 'Passive' }
+                  ]}
+            ]
+        },
+        'Spanning-tree': {
+            'config(RSTP)': [
+                { name: 'mode', label: 'STP 모드', type: 'select', required: true,
+                  options: [
+                      { value: 'rstp', label: 'RSTP' }
+                  ]},
+                { name: 'priority', label: '브릿지 우선순위', type: 'priority', required: true }
+            ],
+            'config(PVST+)': [
+                { name: 'mode', label: 'STP 모드', type: 'select', required: true,
+                  options: [
+                      { value: 'pvst', label: 'PVST+' }
+                  ]},
+                { name: 'vlan_id', label: 'VLAN ID', type: 'vlan', required: true },
+                { name: 'priority', label: '브릿지 우선순위', type: 'priority', required: true }
+            ]
+        },
+        'Port Channel': {
+            'config': [
+                { name: 'channel_number', label: '채널 번호', type: 'number', required: true, min: 1, max: 8 },
+                { name: 'interfaces', label: '인터페이스 목록', type: 'text', required: true },
+                { name: 'mode', label: '채널 모드', type: 'select', required: true,
+                  options: [
+                      { value: 'on', label: 'On' },
+                      { value: 'active', label: 'Active' },
+                      { value: 'passive', label: 'Passive' }
+                  ]}
+            ]
+        },
+        'Storm Control': {
+            'config': [
+                { name: 'interface', label: '인터페이스', type: 'interface', required: true },
+                { name: 'broadcast_level', label: '브로드캐스트 제한 레벨', type: 'number', required: true, min: 0, max: 100 },
+                { name: 'multicast_level', label: '멀티캐스트 제한 레벨', type: 'number', required: true, min: 0, max: 100 },
+                { name: 'unicast_level', label: '유니캐스트 제한 레벨', type: 'number', required: true, min: 0, max: 100 }
+            ]
+        },
+        'Port Security': {
+            'config': [
+                { name: 'interface', label: '인터페이스', type: 'interface', required: true },
+                { name: 'max_mac', label: '최대 MAC 주소 수', type: 'number', required: true, min: 1, max: 100 },
+                { name: 'violation_action', label: '위반 동작', type: 'select', required: true,
+                  options: [
+                      { value: 'shutdown', label: 'Shutdown' },
+                      { value: 'restrict', label: 'Restrict' },
+                      { value: 'protect', label: 'Protect' }
+                  ]}
+            ]
+        },
+        'MAC Address Table': {
+            'config': [
+                { name: 'mac_address', label: 'MAC 주소', type: 'mac', required: true },
+                { name: 'vlan_id', label: 'VLAN ID', type: 'vlan', required: true },
+                { name: 'interface', label: '인터페이스', type: 'interface', required: true }
+            ]
+        }
+    },
+    'QoS': {
+        'Rate Limit': {
+            'config': [
+                { name: 'interface', label: '인터페이스', type: 'interface', required: true },
+                { name: 'rate', label: '대역폭 제한', type: 'number', required: true, min: 1, max: 1000000 }
+            ]
+        },
+        'Traffic Shaping': {
+            'config': [
+                { name: 'interface', label: '인터페이스', type: 'interface', required: true },
+                { name: 'average_rate', label: '평균 전송률', type: 'number', required: true, min: 1, max: 1000000 },
+                { name: 'burst_size', label: '버스트 크기', type: 'number', required: true, min: 1, max: 1000000 }
+            ]
+        }
+    },
+    '보안': {
+        'ACL (Standard)': {
+            'config': [
+                { name: 'acl_number', label: 'ACL 번호', type: 'number', required: true, min: 1, max: 99 },
+                { name: 'action', label: '동작', type: 'select', required: true,
+                  options: [
+                      { value: 'permit', label: '허용' },
+                      { value: 'deny', label: '거부' }
+                  ]},
+                { name: 'source_ip', label: '소스 IP', type: 'ip', required: true },
+                { name: 'source_wildcard', label: '소스 와일드카드', type: 'ip', required: true }
+            ]
+        }
+    },
+    '패스워드복구': {
+        'Password Recovery': {
+            'config': [
+                { name: 'console_port', label: '콘솔 포트', type: 'text', required: true },
+                { name: 'baud_rate', label: '통신 속도', type: 'number', required: true, min: 9600, max: 115200 }
+            ]
+        }
+    }
+};
+
+// 전역 변수로 currentParameters 선언
+let currentParameters = [];
+
 async function loadFeatures() {
     console.log("loadFeatures 호출됨");
     const taskType = document.getElementById('taskType').value;
@@ -68,10 +497,10 @@ async function loadFeatures() {
     const configModeSelect = document.getElementById('configMode');
     const executeButton = document.getElementById('executeButton');
     
-    // 초기화
-    featureSelect.innerHTML = '<option value="">Feature를 선택하세요</option>';
-    subtaskSelect.innerHTML = '<option value="">구분을 선택하세요</option>';
-    configModeSelect.innerHTML = '<option value="">설정모드를 선택하세요</option>';
+    // 기존 옵션 제거
+    featureSelect.innerHTML = '<option value="">기능 선택</option>';
+    subtaskSelect.innerHTML = '<option value="">서브태스크 선택</option>';
+    configModeSelect.innerHTML = '<option value="">모드 선택</option>';
     document.getElementById('parametersForm').innerHTML = '';
     executeButton.disabled = true;
     
@@ -84,61 +513,35 @@ async function loadFeatures() {
     subtaskSelect.disabled = true;
     configModeSelect.disabled = true;
     
-    let features = [];
-    
-    if (taskType === 'LAYER2') {
-        features = [
-            'Link-Aggregation (Manual)',
-            'Link-Aggregation (LACP)',
-            'VLAN',
-            'Spanning-tree'
-        ];
-    } else if (taskType === '시스템관리') {
-        features = [
-            'Hostname',
-            'User',
-            'Enable Password',
-            'IP Address',
-            'Gateway',
-            'NTP',
-            'Clock',
-            'Remote Sysloging',
-            'Telnet',
-            'SSH',
-            'Firmware Upgrade'
-        ];
-    } else if (taskType === '네트워크관리') {
-        features = [
-            'SNMP',
-            'SNMP trap',
-            'SNMPv3',
-            'Port Mirroring',
-            'LLDP',
-            'Loopback'
-        ];
-    } else if (taskType === 'QoS') {
-        features = [
-            'rate-limit'
-        ];
-    } else if (taskType === '보안') {
-        features = [
-            'DHCP snooping',
-            'DAI',
-            'ACL (Standard)',
-            'ACL (Extended)'
-        ];
-    } else if (taskType === '패스워드복구') {
-        features = [
-            'Password Recovery'
-        ];
-    }
-    
+    // 기능 목록 로드
+    const features = taskFeatures[taskType] || [];
     features.forEach(feature => {
         const option = document.createElement('option');
         option.value = feature;
         option.textContent = feature;
         featureSelect.appendChild(option);
     });
+    
+    // 서브태스크 목록 로드
+    subtaskSelect.innerHTML = '<option value="">구분을 선택하세요</option>';
+    const subtasks = ['config', 'check'];
+    subtasks.forEach(subtask => {
+        const option = document.createElement('option');
+        option.value = subtask;
+        option.textContent = subtask === 'config' ? '설정' : '확인';
+        subtaskSelect.appendChild(option);
+    });
+    
+    // 모드 목록 로드
+    configModeSelect.innerHTML = '<option value="">설정모드를 선택하세요</option>';
+    const modes = ['기본'];
+    modes.forEach(mode => {
+        const option = document.createElement('option');
+        option.value = mode;
+        option.textContent = mode;
+        configModeSelect.appendChild(option);
+    });
+    
     console.log("Features loaded");
 }
 
@@ -193,24 +596,35 @@ async function loadParameters() {
 
     configModeSelect.disabled = false;
     
+    // taskParameters에서 현재 작업의 파라미터 정의 가져오기
+    const taskParams = taskParameters[taskType];
+    if (!taskParams || !taskParams[feature]) {
+        console.error('파라미터 정의를 찾을 수 없습니다:', { taskType, feature });
+        return;
+    }
+
+    const featureParams = taskParams[feature];
+    
     if (subtask === 'config') {
         if (feature === 'Spanning-tree') {
             const modes = ['config(RSTP)', 'config(PVST+)'];
             modes.forEach(mode => {
-                const option = document.createElement('option');
-                option.value = mode;
-                option.textContent = mode;
-                configModeSelect.appendChild(option);
+                if (featureParams[mode]) {
+                    const option = document.createElement('option');
+                    option.value = mode;
+                    option.textContent = mode === 'config(RSTP)' ? 'RSTP' : 'PVST+';
+                    configModeSelect.appendChild(option);
+                }
             });
         } else {
             const option = document.createElement('option');
-            option.value = 'config';
+            option.value = '기본';
             option.textContent = '기본';
             configModeSelect.appendChild(option);
         }
     } else {
         const option = document.createElement('option');
-        option.value = 'check';
+        option.value = '기본';
         option.textContent = '기본';
         configModeSelect.appendChild(option);
     }
@@ -233,14 +647,21 @@ async function updateParameters() {
     }
 
     try {
-        console.log(`API 호출: /config/api/parameters/${taskType}/${feature}/${subtask}/${configMode}`);
-        const response = await fetch(`/config/api/parameters/${taskType}/${feature}/${subtask}/${configMode}`);
-        if (!response.ok) {
-            throw new Error('파라미터 로드 실패: ' + response.statusText);
+        // taskParameters에서 직접 파라미터 가져오기
+        let parameters = [];
+        if (taskType && feature) {
+            const taskParams = taskParameters[taskType];
+            if (taskParams && taskParams[feature]) {
+                const featureParams = taskParams[feature];
+                if (featureParams[configMode]) {
+                    parameters = featureParams[configMode];
+                } else if (featureParams['config']) {
+                    parameters = featureParams['config'];
+                }
+            }
         }
-        
-        const parameters = await response.json();
-        console.log('받은 파라미터:', parameters);
+
+        console.log('파라미터:', parameters);
         
         parametersForm.innerHTML = '';
         parameters.forEach(param => {
@@ -262,7 +683,7 @@ async function updateParameters() {
                 });
             } else {
                 input = document.createElement('input');
-                input.type = param.type;
+                input.type = param.type === 'ip' ? 'text' : param.type;
                 input.className = 'form-control';
                 if (param.placeholder) input.placeholder = param.placeholder;
                 if (param.min !== undefined) input.min = param.min;
@@ -272,9 +693,20 @@ async function updateParameters() {
             input.id = param.name;
             input.required = param.required;
             
+            // 에러 메시지를 표시할 div 추가
+            const errorDiv = document.createElement('div');
+            errorDiv.id = `${param.name}Error`;
+            errorDiv.className = 'error-message';
+            
             div.appendChild(label);
             div.appendChild(input);
+            div.appendChild(errorDiv);
             parametersForm.appendChild(div);
+            
+            // 입력값 검증 이벤트 리스너 추가
+            input.addEventListener('input', (e) => {
+                handleParameterInput(param, e.target.value);
+            });
         });
         
         executeButton.disabled = false;
@@ -286,68 +718,200 @@ async function updateParameters() {
     }
 }
 
+// 에러 처리 함수 개선
+function handleError(error) {
+    console.error('Error:', error);
+    let errorMessage = '오류가 발생했습니다.';
+    
+    if (error.response) {
+        const data = error.response.data;
+        errorMessage = data.message || data.error || errorMessage;
+    } else if (error.message) {
+        errorMessage = error.message;
+    }
+    
+    // 에러 메시지를 모달로 표시
+    const errorModal = document.getElementById('errorModal');
+    const errorMessageElement = document.getElementById('errorMessage');
+    errorMessageElement.textContent = errorMessage;
+    errorModal.style.display = 'block';
+}
+
+// 파라미터 검증 함수 수정
+function validateParameter(param, value) {
+    if (!value) return false;
+    
+    const validators = {
+        'text': (v) => typeof v === 'string' && v.length > 0,
+        'number': (v) => !isNaN(v) && isFinite(v),
+        'select': (v) => typeof v === 'string' && v.length > 0,
+        'password': (v) => typeof v === 'string' && v.length >= 8,
+        'ip': (v) => {
+            const parts = v.split('.');
+            return parts.length === 4 && parts.every(part => {
+                const num = parseInt(part);
+                return !isNaN(num) && num >= 0 && num <= 255;
+            });
+        },
+        'mac': (v) => {
+            const parts = v.split('.');
+            return parts.length === 3 && parts.every(part => {
+                const num = parseInt(part, 16);
+                return !isNaN(num) && num >= 0 && num <= 0xFFFF;
+            });
+        },
+        'vlan': (v) => {
+            const num = parseInt(v);
+            return !isNaN(num) && num >= 1 && num <= 4094;
+        },
+        'interface': (v) => {
+            return typeof v === 'string' && (v.startsWith('gi') || v.startsWith('te'));
+        },
+        'priority': (v) => {
+            const num = parseInt(v);
+            return !isNaN(num) && num >= 0 && num <= 65535;
+        }
+    };
+
+    const validator = validators[param.type];
+    if (!validator) return true; // 알 수 없는 타입은 검증하지 않음
+
+    return validator(value);
+}
+
+// 파라미터 입력 처리 함수 수정
+function handleParameterInput(param, value) {
+    const input = document.getElementById(param.name);
+    const errorElement = document.getElementById(`${param.name}Error`);
+    
+    if (!validateParameter(param, value)) {
+        input.classList.add('error');
+        if (errorElement) {
+            errorElement.textContent = `잘못된 ${param.type} 형식입니다.`;
+        }
+        return false;
+    }
+    
+    input.classList.remove('error');
+    if (errorElement) {
+        errorElement.textContent = '';
+    }
+    return true;
+}
+
+// 작업 실행 함수 수정
 async function executeTask() {
-    console.log("executeTask 호출됨");
-    const taskType = document.getElementById('taskType').value;
-    const feature = document.getElementById('feature').value;
-    const subtask = document.getElementById('subtask').value;
-    const configMode = document.getElementById('configMode').value;
-    const parametersForm = document.getElementById('parametersForm');
-    const commandOutput = document.getElementById('commandOutput');
-    const executeButton = document.getElementById('executeButton');
-    
-    executeButton.disabled = true;
-    
     try {
-        // 파라미터 수집
-        const parameters = {};
-        parametersForm.querySelectorAll('input, select').forEach(input => {
-            parameters[input.id] = input.value;
-        });
+        const taskType = document.getElementById('taskType').value;
+        const feature = document.getElementById('feature').value;
+        const subtask = document.getElementById('subtask').value;
+        const configMode = document.getElementById('configMode').value;
         
-        console.log('전송할 데이터:', {
+        if (!taskType || !feature || !subtask || !configMode) {
+            throw new Error('모든 필드를 선택해주세요.');
+        }
+
+        // 파라미터 수집 및 검증
+        const parameters = {};
+        const formGroups = document.querySelectorAll('#parametersForm .form-group');
+        
+        formGroups.forEach(group => {
+            const input = group.querySelector('input, select');
+            if (!input) return;
+            
+            const paramName = input.id;
+            const paramValue = input.value;
+            
+            // 필수 파라미터 검증
+            if (input.required && !paramValue) {
+                throw new Error(`${paramName}은(는) 필수 입력값입니다.`);
+            }
+            
+            // 파라미터 타입 검증
+            if (paramValue) {
+                const isValid = validateParameter(paramName, paramValue);
+                if (!isValid) {
+                    throw new Error(`${paramName}의 형식이 올바르지 않습니다.`);
+                }
+            }
+            
+            parameters[paramName] = paramValue;
+        });
+
+        // API 요청 데이터 구성
+        const requestData = {
             taskType: taskType,
             feature: feature,
             subtask: subtask,
             configMode: configMode,
             parameters: parameters
-        });
-        
-        const response = await fetch('/config/api/execute', {
+        };
+
+        console.log('API 요청 데이터:', requestData);
+
+        // API 호출
+        const response = await fetch('/config/api/execute-task', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                taskType: taskType,
-                feature: feature,
-                subtask: subtask,
-                configMode: configMode,
-                parameters: parameters
-            })
+            body: JSON.stringify(requestData)
         });
-        
+
+        console.log('API 응답 상태:', response.status);
+        const responseData = await response.json();
+        console.log('API 응답 데이터:', responseData);
+
         if (!response.ok) {
-            throw new Error('작업 실행 실패: ' + response.statusText);
+            throw new Error(responseData.error || '작업 실행 중 오류가 발생했습니다.');
         }
-        
-        const result = await response.json();
-        console.log('받은 결과:', result);
-        
-        if (result.error) {
-            commandOutput.textContent = `오류: ${result.error}`;
-            commandOutput.className = 'bg-danger text-white p-3 rounded';
+
+        // 결과 표시
+        if (responseData.data && responseData.data.commands && responseData.data.commands.length > 0) {
+            const commandOutput = document.getElementById('commandOutput');
+            commandOutput.textContent = responseData.data.commands.join('\n');
+            commandOutput.style.display = 'block';
         } else {
-            commandOutput.textContent = result.output || '작업이 성공적으로 실행되었습니다.';
-            commandOutput.className = 'bg-light p-3 rounded';
+            throw new Error('생성된 명령어가 없습니다.');
         }
     } catch (error) {
-        console.error('작업 실행 중 오류:', error);
-        commandOutput.textContent = `작업 실행 실패: ${error.message}`;
-        commandOutput.className = 'bg-danger text-white p-3 rounded';
-    } finally {
-        executeButton.disabled = false;
+        console.error('작업 실행 오류:', error);
+        handleError(error);
     }
 }
+
+// 에러 모달 관련 함수
+function closeErrorModal() {
+    document.getElementById('errorModal').style.display = 'none';
+}
+
+// 성공 메시지 표시 함수
+function showSuccessMessage(message) {
+    const successModal = document.getElementById('successModal');
+    const successMessageElement = document.getElementById('successMessage');
+    successMessageElement.textContent = message;
+    successModal.style.display = 'block';
+}
+
+// 성공 모달 닫기 함수
+function closeSuccessModal() {
+    document.getElementById('successModal').style.display = 'none';
+}
+
+// 모달 외부 클릭 시 닫기
+window.onclick = function(event) {
+    const errorModal = document.getElementById('errorModal');
+    const successModal = document.getElementById('successModal');
+    if (event.target == errorModal) {
+        errorModal.style.display = 'none';
+    }
+    if (event.target == successModal) {
+        successModal.style.display = 'none';
+    }
+}
+
+// X 버튼 클릭 시 닫기
+document.querySelector('.close').onclick = closeErrorModal;
+document.querySelector('.close-success').onclick = closeSuccessModal;
 </script>
 {% endblock %} 

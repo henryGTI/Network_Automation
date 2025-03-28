@@ -1,4 +1,4 @@
-﻿from app.database import db
+﻿from app import db
 from datetime import datetime
 
 class Device(db.Model):
@@ -7,13 +7,18 @@ class Device(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     ip_address = db.Column(db.String(15), nullable=False)
-    vendor = db.Column(db.String(50), nullable=False)
-    device_type = db.Column(db.String(50), nullable=False)
-    username = db.Column(db.String(50), nullable=False)
-    password = db.Column(db.String(100), nullable=False)
+    device_type = db.Column(db.String(50))
+    vendor = db.Column(db.String(50))
+    model = db.Column(db.String(100))
+    username = db.Column(db.String(50))
+    password = db.Column(db.String(100))
+    enable_password = db.Column(db.String(100))
     status = db.Column(db.String(20), default='offline')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Device {self.name}>'
 
     def to_dict(self):
         return {

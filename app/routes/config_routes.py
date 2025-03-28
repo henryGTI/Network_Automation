@@ -3,10 +3,559 @@ from ..services.config_service import ConfigService
 from app.utils.logger import setup_logger
 from app.models.task_type import TaskType
 from app.database import db
+from app.models.subtask import Subtask
+from app.models.task import Task
+from app.models.device import Device
+import logging
+from datetime import datetime
+import os
+import subprocess
+import json
+from typing import List, Dict, Any, Tuple
 
 bp = Blueprint('config', __name__, url_prefix='/config')
 config_service = ConfigService()
 logger = setup_logger(__name__)
+
+# 로거 설정
+logger = logging.getLogger(__name__)
+
+# 표준 에러 응답 형식
+def error_response(message: str, status_code: int = 400) -> Tuple[Dict[str, Any], int]:
+    return jsonify({
+        'status': 'error',
+        'message': message,
+        'error_code': status_code
+    }), status_code
+
+# 성공 응답 형식
+def success_response(data: Any = None, message: str = None) -> Tuple[Dict[str, Any], int]:
+    response = {'status': 'success'}
+    if data is not None:
+        response['data'] = data
+    if message:
+        response['message'] = message
+    return jsonify(response), 200
+
+# 파라미터 검증 함수 개선
+def validate_parameter_type(param_value: Any, expected_type: str) -> Tuple[bool, str]:
+    type_validators = {
+        'text': lambda x: isinstance(x, str),
+        'number': lambda x: isinstance(x, (int, float)),
+        'select': lambda x: isinstance(x, str),
+        'password': lambda x: isinstance(x, str),
+        'ip': lambda x: isinstance(x, str) and all(0 <= int(part) <= 255 for part in x.split('.')),
+        'mac': lambda x: isinstance(x, str) and len(x.split('.')) == 3,
+        'vlan': lambda x: isinstance(x, (int, str)) and 1 <= int(x) <= 4094,
+        'interface': lambda x: isinstance(x, str) and (x.startswith('gi') or x.startswith('te')),
+        'priority': lambda x: isinstance(x, (int, str)) and 0 <= int(x) <= 65535
+    }
+    
+    validator = type_validators.get(expected_type)
+    if not validator:
+        return True, None  # 알 수 없는 타입은 검증하지 않음
+        
+    try:
+        is_valid = validator(param_value)
+        return is_valid, None if is_valid else f"잘못된 {expected_type} 형식입니다."
+    except Exception as e:
+        return False, f"파라미터 검증 중 오류 발생: {str(e)}"
+
+def validate_parameters(required_params: List[Dict[str, Any]], parameters: Dict[str, Any]) -> Tuple[bool, str]:
+    # 필수 파라미터 존재 여부 검사
+    missing = [p['name'] for p in required_params if p['name'] not in parameters]
+    if missing:
+        return False, f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing)}"
+    
+    # 파라미터 타입 검증
+    for param in required_params:
+        if param['name'] in parameters:
+            is_valid, error_msg = validate_parameter_type(parameters[param['name']], param['type'])
+            if not is_valid:
+                return False, f"{param['name']}: {error_msg}"
+    
+    return True, None
+
+# 명령어 생성기 클래스
+class CommandGenerator:
+    @staticmethod
+    def generate_layer2_commands(feature: str, parameters: Dict[str, Any]) -> List[str]:
+        commands = []
+        if feature == 'Link-Aggregation (Manual)':
+            is_valid, error_msg = validate_parameters(['group_id', 'interface_list'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'link-aggregation {parameters["group_id"]} mode manual',
+                f'interface gi {parameters["interface_list"]}',
+                f'link-aggregation {parameters["group_id"]} manual',
+                'end'
+            ])
+        elif feature == 'Link-Aggregation (LACP)':
+            is_valid, error_msg = validate_parameters(['group_id', 'interface_list'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'link-aggregation {parameters["group_id"]} mode lacp',
+                f'interface gi {parameters["interface_list"]}',
+                f'link-aggregation {parameters["group_id"]} active',
+                'end'
+            ])
+        elif feature == 'VLAN':
+            is_valid, error_msg = validate_parameters(['vlan_id', 'interface', 'mode'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'vlan {parameters["vlan_id"]}',
+                f'interface {parameters["interface"]}'
+            ])
+            if parameters['mode'] == 'access':
+                commands.append(f'switchport access vlan {parameters["vlan_id"]}')
+            elif parameters['mode'] == 'trunk':
+                commands.extend([
+                    'switchport mode trunk',
+                    f'switchport trunk allowed vlan add {parameters["vlan_id"]}'
+                ])
+            commands.append('end')
+        elif feature == 'Spanning-tree':
+            is_valid, error_msg = validate_parameters(['instance_id', 'priority'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                'spanning-tree mode rstp',
+                'spanning-tree enable',
+                f'spanning-tree mst instance {parameters["instance_id"]} priority {parameters["priority"]}',
+                'end'
+            ])
+        elif feature == 'Port Channel':
+            is_valid, error_msg = validate_parameters(['channel_id', 'interface_list', 'mode'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface port-channel {parameters["channel_id"]}',
+                f'interface range {parameters["interface_list"]}',
+                f'channel-group {parameters["channel_id"]} mode {parameters["mode"]}',
+                'end'
+            ])
+        elif feature == 'Storm Control':
+            is_valid, error_msg = validate_parameters(['interface', 'type', 'level'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                f'storm-control {parameters["type"]} level {parameters["level"]}',
+                'end'
+            ])
+        elif feature == 'Port Security':
+            is_valid, error_msg = validate_parameters(['interface', 'max_mac', 'violation', 'sticky'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                'switchport port-security',
+                f'switchport port-security maximum {parameters["max_mac"]}',
+                f'switchport port-security violation {parameters["violation"]}',
+                f'switchport port-security {"mac-address sticky" if parameters["sticky"] else ""}',
+                'end'
+            ])
+        elif feature == 'MAC Address Table':
+            is_valid, error_msg = validate_parameters(['mac_address', 'vlan_id', 'interface'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'mac address-table static {parameters["mac_address"]} vlan {parameters["vlan_id"]} interface {parameters["interface"]}',
+                'end'
+            ])
+        return commands
+
+    @staticmethod
+    def generate_qos_commands(feature: str, parameters: Dict[str, Any]) -> List[str]:
+        commands = []
+        if feature == 'Rate Limit':
+            is_valid, error_msg = validate_parameters(['interface', 'direction', 'rate', 'burst'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                f'rate-limit {parameters["direction"]} {parameters["rate"]} {parameters["burst"]}',
+                'end'
+            ])
+        elif feature == 'Traffic Shaping':
+            is_valid, error_msg = validate_parameters(['interface', 'average_rate', 'burst'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                f'traffic-shape rate {parameters["average_rate"]} {parameters["burst"]}',
+                'end'
+            ])
+        elif feature == 'Traffic Policing':
+            is_valid, error_msg = validate_parameters(['interface', 'cir', 'pir', 'cbs', 'pbs'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                f'police cir {parameters["cir"]} pir {parameters["pir"]} cbs {parameters["cbs"]} pbs {parameters["pbs"]}',
+                'end'
+            ])
+        elif feature == 'Queue Scheduling':
+            is_valid, error_msg = validate_parameters(['interface', 'queue', 'bandwidth'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                f'wrr-queue bandwidth {parameters["queue"]} {parameters["bandwidth"]}',
+                'end'
+            ])
+        elif feature == 'CoS Mapping':
+            is_valid, error_msg = validate_parameters(['cos', 'queue'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'wrr-queue cos-map {parameters["queue"]} {parameters["cos"]}',
+                'end'
+            ])
+        elif feature == 'DSCP Mapping':
+            is_valid, error_msg = validate_parameters(['dscp', 'queue'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'wrr-queue dscp-map {parameters["queue"]} {parameters["dscp"]}',
+                'end'
+            ])
+        return commands
+
+    @staticmethod
+    def generate_security_commands(feature: str, parameters: Dict[str, Any]) -> List[str]:
+        commands = []
+        if feature == 'DHCP Snooping':
+            is_valid, error_msg = validate_parameters(['enabled', 'interface', 'trust'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                'ip dhcp snooping',
+                f'interface {parameters["interface"]}',
+                f'ip dhcp snooping trust',
+                'end'
+            ])
+        elif feature == 'DAI':
+            is_valid, error_msg = validate_parameters(['interface', 'enabled'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                'ip arp inspection',
+                'end'
+            ])
+        elif feature == 'ACL (Standard)':
+            is_valid, error_msg = validate_parameters(['acl_number', 'action', 'source_ip', 'interface'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'access-list {parameters["acl_number"]} {parameters["action"]} {parameters["source_ip"]}',
+                f'interface {parameters["interface"]}',
+                f'ip access-group {parameters["acl_number"]} in',
+                'end'
+            ])
+        elif feature == 'ACL (Extended)':
+            is_valid, error_msg = validate_parameters(['acl_number', 'action', 'source_ip', 'destination_ip', 'protocol', 'interface'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'access-list {parameters["acl_number"]} {parameters["action"]} {parameters["protocol"]} {parameters["source_ip"]} {parameters["destination_ip"]}',
+                f'interface {parameters["interface"]}',
+                f'ip access-group {parameters["acl_number"]} in',
+                'end'
+            ])
+        elif feature == 'Port Security':
+            is_valid, error_msg = validate_parameters(['interface', 'max_mac', 'violation', 'sticky'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                'switchport port-security',
+                f'switchport port-security maximum {parameters["max_mac"]}',
+                f'switchport port-security violation {parameters["violation"]}',
+                f'switchport port-security {"mac-address sticky" if parameters["sticky"] else ""}',
+                'end'
+            ])
+        elif feature == 'AAA':
+            is_valid, error_msg = validate_parameters(['method', 'server_group', 'local_fallback'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                'aaa new-model',
+                f'aaa authentication login default group {parameters["server_group"]} {"local" if parameters["local_fallback"] else ""}',
+                'end'
+            ])
+        elif feature == 'RADIUS':
+            is_valid, error_msg = validate_parameters(['server_ip', 'auth_port', 'key'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'radius-server host {parameters["server_ip"]} auth-port {parameters["auth_port"]} key {parameters["key"]}',
+                'end'
+            ])
+        elif feature == 'TACACS+':
+            is_valid, error_msg = validate_parameters(['server_ip', 'key'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'tacacs-server host {parameters["server_ip"]}',
+                f'tacacs-server key {parameters["key"]}',
+                'end'
+            ])
+        return commands
+
+    @staticmethod
+    def generate_password_recovery_commands(feature: str, parameters: Dict[str, Any]) -> List[str]:
+        commands = []
+        if feature == 'Password Recovery':
+            is_valid, error_msg = validate_parameters(['username', 'password'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'boot system flash:/IOS-XE-64.bin',
+                'rommon>boot',
+                'rommon>confreg 0x2142',
+                'rommon>reset',
+                'configure terminal',
+                f'username {parameters["username"]} privilege 15 password {parameters["password"]}',
+                'config-register 0x2102',
+                'end',
+                'write memory',
+                'reload'
+            ])
+        return commands
+
+    @staticmethod
+    def generate_system_commands(feature: str, parameters: Dict[str, Any]) -> List[str]:
+        commands = []
+        if feature == 'Hostname':
+            is_valid, error_msg = validate_parameters(['hostname'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'hostname {parameters["hostname"]}',
+                'end'
+            ])
+        elif feature == 'User':
+            is_valid, error_msg = validate_parameters(['username', 'privilege', 'password'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'username {parameters["username"]} privilege {parameters["privilege"]} password {parameters["password"]}',
+                'end'
+            ])
+        elif feature == 'Enable Password':
+            is_valid, error_msg = validate_parameters(['password'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'enable password {parameters["password"]}',
+                'end'
+            ])
+        elif feature == 'IP Address':
+            is_valid, error_msg = validate_parameters(['interface', 'ip_address', 'subnet_mask'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface {parameters["interface"]}',
+                f'ip address {parameters["ip_address"]} {parameters["subnet_mask"]}',
+                'no shutdown',
+                'end'
+            ])
+        elif feature == 'Gateway':
+            is_valid, error_msg = validate_parameters(['gateway_ip'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'ip default-gateway {parameters["gateway_ip"]}',
+                'end'
+            ])
+        elif feature == 'NTP':
+            is_valid, error_msg = validate_parameters(['server_ip'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'ntp server {parameters["server_ip"]}',
+                'end'
+            ])
+        elif feature == 'Clock':
+            is_valid, error_msg = validate_parameters(['timezone', 'datetime'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'clock timezone {parameters["timezone"]}',
+                f'clock set {parameters["datetime"]}',
+                'end'
+            ])
+        elif feature == 'Remote Sysloging':
+            is_valid, error_msg = validate_parameters(['server_ip', 'facility'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'logging {parameters["server_ip"]} facility {parameters["facility"]}',
+                'end'
+            ])
+        elif feature == 'Telnet':
+            is_valid, error_msg = validate_parameters(['enabled'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            if parameters['enabled'] == 'enable':
+                commands.extend([
+                    'configure terminal',
+                    'line vty 0 15',
+                    'login local',
+                    'transport input telnet',
+                    'end'
+                ])
+            else:
+                commands.extend([
+                    'configure terminal',
+                    'line vty 0 15',
+                    'no login',
+                    'no transport input',
+                    'end'
+                ])
+        elif feature == 'SSH':
+            is_valid, error_msg = validate_parameters(['enabled', 'version'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            if parameters['enabled'] == 'enable':
+                commands.extend([
+                    'configure terminal',
+                    'ip ssh version 2',
+                    'line vty 0 15',
+                    'login local',
+                    'transport input ssh',
+                    'end'
+                ])
+            else:
+                commands.extend([
+                    'configure terminal',
+                    'line vty 0 15',
+                    'no login',
+                    'no transport input',
+                    'end'
+                ])
+        elif feature == 'Firmware Upgrade':
+            is_valid, error_msg = validate_parameters(['server_ip', 'filename'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'boot system tftp://{parameters["server_ip"]}/{parameters["filename"]}',
+                'end',
+                'write memory',
+                'reload'
+            ])
+        return commands
+
+    @staticmethod
+    def generate_network_commands(feature: str, parameters: Dict[str, Any]) -> List[str]:
+        commands = []
+        if feature == 'SNMP':
+            is_valid, error_msg = validate_parameters(['community', 'access'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'snmp-server community {parameters["community"]} {parameters["access"]}',
+                'end'
+            ])
+        elif feature == 'SNMP trap':
+            is_valid, error_msg = validate_parameters(['host', 'community'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'snmp-server host {parameters["host"]} {parameters["community"]}',
+                'end'
+            ])
+        elif feature == 'SNMPv3':
+            is_valid, error_msg = validate_parameters(['username', 'auth_type', 'auth_password', 'priv_type', 'priv_password'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'snmp-server group {parameters["username"]} v3 priv',
+                f'snmp-server user {parameters["username"]} {parameters["username"]} v3 auth {parameters["auth_type"]} {parameters["auth_password"]} priv {parameters["priv_type"]} {parameters["priv_password"]}',
+                'end'
+            ])
+        elif feature == 'Port Mirroring':
+            is_valid, error_msg = validate_parameters(['session', 'source_interface', 'destination_interface'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'monitor session {parameters["session"]} source interface {parameters["source_interface"]}',
+                f'monitor session {parameters["session"]} destination interface {parameters["destination_interface"]}',
+                'end'
+            ])
+        elif feature == 'LLDP':
+            is_valid, error_msg = validate_parameters(['enabled', 'interface'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            if parameters['enabled'] == 'enable':
+                commands.extend([
+                    'configure terminal',
+                    'lldp run',
+                    f'interface {parameters["interface"]}',
+                    'lldp transmit',
+                    'lldp receive',
+                    'end'
+                ])
+            else:
+                commands.extend([
+                    'configure terminal',
+                    f'interface {parameters["interface"]}',
+                    'no lldp transmit',
+                    'no lldp receive',
+                    'end'
+                ])
+        elif feature == 'Loopback':
+            is_valid, error_msg = validate_parameters(['interface_number', 'ip_address', 'subnet_mask'], parameters)
+            if not is_valid:
+                raise ValueError(error_msg)
+            commands.extend([
+                'configure terminal',
+                f'interface loopback {parameters["interface_number"]}',
+                f'ip address {parameters["ip_address"]} {parameters["subnet_mask"]}',
+                'no shutdown',
+                'end'
+            ])
+        return commands
 
 @bp.route('/')
 def index():
@@ -399,680 +948,169 @@ def get_subtasks(task_type):
 
 @bp.route('/api/parameters/<task_type>/<feature>/<subtask>/<config_mode>', methods=['GET'])
 def get_parameters(task_type, feature, subtask, config_mode):
+    """작업 유형, 기능, 서브태스크, 설정모드에 따른 파라미터 목록을 반환합니다."""
     try:
         logger.info(f"파라미터 요청: task_type={task_type}, feature={feature}, subtask={subtask}, config_mode={config_mode}")
         
-        # 패스워드복구 작업에 대한 파라미터 정의
-        if task_type == '패스워드복구':
-            if feature == 'Password Recovery':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'username', 'type': 'text', 'label': '새로운 root ID', 'required': True,
-                         'placeholder': '예: admin'},
-                        {'name': 'password', 'type': 'password', 'label': '새로운 root 패스워드', 'required': True}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'User':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'username', 'type': 'text', 'label': '사용자 이름', 'required': True,
-                         'placeholder': '예: admin'},
-                        {'name': 'privilege', 'type': 'number', 'label': '권한 레벨', 'required': True,
-                         'min': 1, 'max': 15, 'default': '15'},
-                        {'name': 'password', 'type': 'password', 'label': '비밀번호', 'required': True}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'Enable Password':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'password', 'type': 'password', 'label': '새로운 Enable 비밀번호', 'required': True}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-
-        # 보안 작업에 대한 파라미터 정의
-        if task_type == '보안':
-            if feature == 'DHCP snooping':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'enabled', 'type': 'select', 'label': 'DHCP snooping 활성화', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gi 0/24'},
-                        {'name': 'trust', 'type': 'select', 'label': 'Trust 포트 설정', 'required': True,
-                         'options': [{'value': 'trust', 'label': 'Trust'}, {'value': 'untrust', 'label': 'Untrust'}]}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'DAI':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gi 0/1-0/22'},
-                        {'name': 'enabled', 'type': 'select', 'label': 'DAI 활성화', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'ACL (Standard)':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'acl_number', 'type': 'number', 'label': 'ACL 번호', 'required': True,
-                         'min': 1, 'max': 1000, 'placeholder': '예: 1'},
-                        {'name': 'action', 'type': 'select', 'label': '동작', 'required': True,
-                         'options': [{'value': 'permit', 'label': 'Permit'}, {'value': 'deny', 'label': 'Deny'}]},
-                        {'name': 'source_ip', 'type': 'text', 'label': '출발지 IP', 'required': True,
-                         'placeholder': '예: 192.1.1.1'},
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gi 0/1'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'ACL (Extended)':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'acl_number', 'type': 'number', 'label': 'ACL 번호', 'required': True,
-                         'min': 1001, 'max': 2000, 'placeholder': '예: 1001'},
-                        {'name': 'action', 'type': 'select', 'label': '동작', 'required': True,
-                         'options': [{'value': 'permit', 'label': 'Permit'}, {'value': 'deny', 'label': 'Deny'}]},
-                        {'name': 'source_ip', 'type': 'text', 'label': '출발지 IP', 'required': True,
-                         'placeholder': '예: 192.1.1.2'},
-                        {'name': 'destination_ip', 'type': 'text', 'label': '목적지 IP', 'required': True,
-                         'placeholder': '예: 192.1.1.3'},
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gi 0/1'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-
-        # QoS 작업에 대한 파라미터 정의
-        if task_type == 'QoS':
-            if feature == 'rate-limit':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gi 0/1'},
-                        {'name': 'kbps', 'type': 'number', 'label': '대역폭 (kbps)', 'required': True,
-                         'placeholder': '예: 6560'},
-                        {'name': 'burst', 'type': 'number', 'label': 'Burst Size', 'required': True,
-                         'placeholder': '예: 8192'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-
-        # 네트워크관리 작업에 대한 파라미터 정의
-        if task_type == '네트워크관리':
-            if feature == 'SNMP':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'enabled', 'type': 'select', 'label': 'SNMP 활성화', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
-                        {'name': 'community', 'type': 'text', 'label': 'Community 문자열', 'required': True,
-                         'placeholder': '예: test ro'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'SNMP trap':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'host', 'type': 'text', 'label': '트랩 서버 IP', 'required': True,
-                         'placeholder': '예: 192.168.1.100'},
-                        {'name': 'community', 'type': 'text', 'label': 'Community 문자열', 'required': True,
-                         'placeholder': '예: test'},
-                        {'name': 'version', 'type': 'select', 'label': 'SNMP 버전', 'required': True,
-                         'options': [{'value': '2c', 'label': 'v2c'}]}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'SNMPv3':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'group_name', 'type': 'text', 'label': '그룹 이름', 'required': True,
-                         'placeholder': '예: team'},
-                        {'name': 'security_level', 'type': 'select', 'label': '보안 레벨', 'required': True,
-                         'options': [{'value': 'v3 authpriv', 'label': 'authpriv'}, {'value': 'v3 auth', 'label': 'auth'}]},
-                        {'name': 'username', 'type': 'text', 'label': '사용자 이름', 'required': True,
-                         'placeholder': '예: admin'},
-                        {'name': 'auth_password', 'type': 'password', 'label': '인증 비밀번호', 'required': True}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'Port Mirroring':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'session_id', 'type': 'number', 'label': '세션 ID', 'required': True,
-                         'min': 1, 'max': 4},
-                        {'name': 'source_interface', 'type': 'text', 'label': '소스 인터페이스', 'required': True,
-                         'placeholder': '예: gigabitethernet 0/1'},
-                        {'name': 'destination_interface', 'type': 'text', 'label': '목적지 인터페이스', 'required': True,
-                         'placeholder': '예: gigabitethernet 0/23'},
-                        {'name': 'direction', 'type': 'select', 'label': '모니터링 방향', 'required': True,
-                         'options': [{'value': 'both', 'label': '양방향'}, {'value': 'rx', 'label': '수신만'}, {'value': 'tx', 'label': '송신만'}]}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'LLDP':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gigabitethernet 0/1'},
-                        {'name': 'enabled', 'type': 'select', 'label': 'LLDP 활성화', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
-                        {'name': 'receive', 'type': 'select', 'label': 'LLDP 수신', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
-                        {'name': 'transmit', 'type': 'select', 'label': 'LLDP 송신', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-                    
-            elif feature == 'Loopback':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True,
-                         'placeholder': '예: gigabitethernet 0/1'},
-                        {'name': 'enabled', 'type': 'select', 'label': 'Loopback-detection 활성화', 'required': True,
-                         'options': [{'value': 'enable', 'label': '활성화'}, {'value': 'disable', 'label': '비활성화'}]},
-                        {'name': 'interval', 'type': 'number', 'label': '검출 간격(초)', 'required': True,
-                         'min': 1, 'max': 60, 'default': '10'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([])
-
-        # LAYER2 작업에 대한 기존 파라미터 정의
-        elif task_type == 'LAYER2':
-            if feature == 'Link-Aggregation (Manual)':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': True, 'default': '1'},
-                        {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: 0/1-0/2'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([
-                        'show link-aggregation brief',
-                        f'show link-aggregation group {parameters.get("group_id", "1")}'
-                    ])
-            elif feature == 'Link-Aggregation (LACP)':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'group_id', 'type': 'number', 'label': '그룹 ID', 'required': True, 'default': '1'},
-                        {'name': 'interface_list', 'type': 'text', 'label': '인터페이스 목록', 'required': True, 'placeholder': '예: 0/1-0/2'}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([
-                        'show link-aggregation brief',
-                        f'show link-aggregation group {parameters.get("group_id", "1")}'
-                    ])
-            elif feature == 'VLAN':
-                if subtask == 'config':
-                    return jsonify([
-                        {'name': 'vlan_id', 'type': 'text', 'label': 'VLAN ID', 'required': True, 'placeholder': '예: 10-15,20'},
-                        {'name': 'interface', 'type': 'text', 'label': '인터페이스', 'required': True, 'placeholder': '예: gi 0/1'},
-                        {'name': 'mode', 'type': 'select', 'label': '모드', 'required': True,
-                         'options': [{'value': 'access', 'label': 'Access'}, {'value': 'trunk', 'label': 'Trunk'}]}
-                    ])
-                elif subtask == 'check':
-                    return jsonify([
-                        'show vlan',
-                        f'show interface {parameters["interface"]} vlan status'
-                    ])
-            elif feature == 'Spanning-tree':
-                if subtask == 'config':
-                    if config_mode == 'config(RSTP)':
-                        return jsonify([
-                            {'name': 'instance_id', 'type': 'number', 'label': 'MST 인스턴스 ID', 'required': True, 'default': '0'},
-                            {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'default': '32768'}
-                        ])
-                    elif config_mode == 'config(PVST+)':
-                        return jsonify([
-                            {'name': 'vlan_id', 'type': 'number', 'label': 'VLAN ID', 'required': True},
-                            {'name': 'priority', 'type': 'number', 'label': '우선순위', 'required': True, 'default': '32768'}
-                        ])
-                elif subtask == 'check':
-                    return jsonify([])
+        # 파라미터 정의
+        parameters = {
+            '시스템관리': {
+                'Hostname': {
+                    'config': [
+                        {'name': 'hostname', 'label': '호스트명', 'type': 'text', 'required': True}
+                    ]
+                },
+                'User': {
+                    'config': [
+                        {'name': 'username', 'label': '사용자명', 'type': 'text', 'required': True},
+                        {'name': 'privilege', 'label': '권한 레벨', 'type': 'number', 'required': True, 'min': 0, 'max': 15},
+                        {'name': 'password', 'label': '비밀번호', 'type': 'password', 'required': True}
+                    ]
+                },
+                'Enable Password': {
+                    'config': [
+                        {'name': 'password', 'label': 'Enable 비밀번호', 'type': 'password', 'required': True}
+                    ]
+                },
+                'IP Address': {
+                    'config': [
+                        {'name': 'interface', 'label': '인터페이스', 'type': 'text', 'required': True},
+                        {'name': 'ip_address', 'label': 'IP 주소', 'type': 'text', 'required': True},
+                        {'name': 'subnet_mask', 'label': '서브넷 마스크', 'type': 'text', 'required': True}
+                    ]
+                }
+            },
+            '네트워크관리': {
+                'SNMP': {
+                    'config': [
+                        {'name': 'community', 'label': '커뮤니티 문자열', 'type': 'text', 'required': True},
+                        {'name': 'access', 'label': '접근 권한', 'type': 'select', 'required': True, 
+                         'options': [
+                             {'value': 'read', 'label': '읽기 전용'},
+                             {'value': 'write', 'label': '읽기/쓰기'}
+                         ]}
+                    ]
+                }
+            },
+            'LAYER2': {
+                'VLAN': {
+                    'config': [
+                        {'name': 'vlan_id', 'label': 'VLAN ID', 'type': 'number', 'required': True, 'min': 1, 'max': 4094},
+                        {'name': 'vlan_name', 'label': 'VLAN 이름', 'type': 'text', 'required': True}
+                    ]
+                }
+            }
+        }
         
-        logger.warning(f"지원되지 않는 파라미터 요청: {task_type}/{feature}/{subtask}/{config_mode}")
+        # 파라미터 가져오기
+        if task_type in parameters and feature in parameters[task_type]:
+            task_params = parameters[task_type][feature]
+            if subtask in task_params and config_mode in task_params[subtask]:
+                return jsonify(task_params[subtask][config_mode])
+        
+        logger.warning(f"파라미터를 찾을 수 없음: task_type={task_type}, feature={feature}, subtask={subtask}, config_mode={config_mode}")
         return jsonify([])
         
     except Exception as e:
-        logger.error(f"파라미터 조회 실패: {str(e)}")
+        logger.error(f"파라미터 조회 중 오류 발생: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@bp.route('/api/execute', methods=['POST'])
+@bp.route('/api/execute-task', methods=['POST'])
 def execute_task():
+    logger.info("작업 실행 요청")
     try:
         data = request.get_json()
-        logger.info("=== 실행 요청 데이터 ===")
-        logger.info(f"Raw Data: {data}")
-        
         if not data:
             logger.error("요청 데이터가 없습니다.")
-            return jsonify({'error': '요청 데이터가 없습니다.'}), 400
-            
+            return error_response("요청 데이터가 없습니다.")
+
+        logger.info(f"수신된 데이터: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
         task_type = data.get('taskType')
         feature = data.get('feature')
         subtask = data.get('subtask')
         config_mode = data.get('configMode')
         parameters = data.get('parameters', {})
-        
-        logger.info(f"Task Type: {task_type}")
-        logger.info(f"Feature: {feature}")
-        logger.info(f"Subtask: {subtask}")
-        logger.info(f"Config Mode: {config_mode}")
-        logger.info(f"Parameters: {parameters}")
-        
-        # 패스워드복구 작업 처리
-        if task_type == '패스워드복구':
-            commands = []
-            
-            if feature == 'Password Recovery':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['username', 'password']):
-                        return jsonify({'error': '사용자 이름과 비밀번호가 필요합니다.'}), 400
-                    commands = [
-                        'boot system flash:/IOS-XE-64.bin',
-                        'rommon>boot',
-                        'rommon>confreg 0x2142',
-                        'rommon>reset',
-                        'configure terminal',
-                        f'username {parameters["username"]} privilege 15 password {parameters["password"]}',
-                        'config-register 0x2102',
-                        'end',
-                        'write memory',
-                        'reload'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show version',
-                        'show running-config | include username'
-                    ]
-            
-            if commands:
-                result = {'output': '\n'.join(commands)}
-                logger.info(f"반환할 결과: {result}")
-                return jsonify(result)
-            else:
-                logger.warning("생성된 명령어가 없습니다.")
-                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
-        
-        # 보안 작업 처리
-        elif task_type == '보안':
-            commands = []
-            
-            if feature == 'DHCP snooping':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['enabled', 'interface', 'trust']):
-                        return jsonify({'error': 'DHCP snooping 활성화 여부, 인터페이스, Trust 포트 설정이 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        'dhcp-snooping',
-                        f'interface {parameters["interface"]}',
-                        f'dhcp-snooping trust',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show dhcp-snooping database',
-                        'show dhcp-snooping packet statistics',
-                        'clear dhcp-snooping database',
-                        'clear dhcp-snooping packet statistics'
-                    ]
-            
-            elif feature == 'DAI':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['interface', 'enabled']):
-                        return jsonify({'error': '인터페이스와 DAI 활성화 여부가 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'interface {parameters["interface"]}',
-                        'ip arp inspection',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show ip arp inspection',
-                        'show ip arp inspection log-information'
-                    ]
-            
-            elif feature == 'ACL (Standard)':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['acl_number', 'action', 'source_ip', 'interface']):
-                        return jsonify({'error': 'ACL 번호, 동작, 출발지 IP, 인터페이스가 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'access-list {parameters["acl_number"]} {parameters["action"]} host {parameters["source_ip"]}',
-                        f'interface {parameters["interface"]}',
-                        f'ip access-group {parameters["acl_number"]} in',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = ['show access-list']
-            
-            elif feature == 'ACL (Extended)':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['acl_number', 'action', 'source_ip', 'destination_ip', 'interface']):
-                        return jsonify({'error': 'ACL 번호, 동작, 출발지 IP, 목적지 IP, 인터페이스가 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'access-list {parameters["acl_number"]} {parameters["action"]} tcp host {parameters["source_ip"]} host {parameters["destination_ip"]} eq 3001',
-                        f'interface {parameters["interface"]}',
-                        f'ip access-group {parameters["acl_number"]} in',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = ['show access-list']
-            
-            if commands:
-                result = {'output': '\n'.join(commands)}
-                logger.info(f"반환할 결과: {result}")
-                return jsonify(result)
-            else:
-                logger.warning("생성된 명령어가 없습니다.")
-                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
-        
-        # QoS 작업 처리
-        elif task_type == 'QoS':
-            commands = []
-            
-            if feature == 'rate-limit':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['interface', 'kbps', 'burst']):
-                        return jsonify({'error': '인터페이스, 대역폭, Burst Size가 모두 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'interface {parameters["interface"]}',
-                        f'rate-limit default {parameters["kbps"]} {parameters["burst"]}',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show rate-limit',
-                        'show run'
-                    ]
-            
-            if commands:
-                result = {'output': '\n'.join(commands)}
-                logger.info(f"반환할 결과: {result}")
-                return jsonify(result)
-            else:
-                logger.warning("생성된 명령어가 없습니다.")
-                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
-        
-        # 네트워크관리 작업 처리
-        elif task_type == '네트워크관리':
-            commands = []
-            
-            if feature == 'SNMP':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['enabled', 'community']):
-                        return jsonify({'error': 'SNMP 활성화 여부와 Community 문자열이 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        'snmp-server start',
-                        f'snmp-server community {parameters["community"]}',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show snmp-server',
-                        'show snmp community'
-                    ]
-            
-            elif feature == 'SNMP trap':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['host', 'community', 'version']):
-                        return jsonify({'error': '트랩 서버 IP, Community 문자열, SNMP 버전이 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'snmp-server host {parameters["host"]} traps community {parameters["community"]}',
-                        'snmp-server enable traps',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = ['show snmp-server host']
-            
-            elif feature == 'SNMPv3':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['group_name', 'security_level', 'username', 'auth_password']):
-                        return jsonify({'error': '그룹 이름, 보안 레벨, 사용자 이름, 인증 비밀번호가 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'snmp-server group {parameters["group_name"]} {parameters["security_level"]} read default',
-                        f'snmp-server user {parameters["username"]} {parameters["group_name"]} {parameters["security_level"]} auth sha {parameters["auth_password"]} encrypt des coredge123',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show snmp-server view',
-                        'show snmp-server group',
-                        'show snmp-server user'
-                    ]
-            
-            elif feature == 'Port Mirroring':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['session_id', 'source_interface', 'destination_interface', 'direction']):
-                        return jsonify({'error': '세션 ID, 소스 인터페이스, 목적지 인터페이스, 모니터링 방향이 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        f'monitor session {parameters["session_id"]} source interface {parameters["source_interface"]} {parameters["direction"]}',
-                        f'monitor session {parameters["session_id"]} destination interface {parameters["destination_interface"]}',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = ['show monitor session all']
-            
-            elif feature == 'LLDP':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['interface', 'enabled', 'receive', 'transmit']):
-                        return jsonify({'error': '인터페이스, LLDP 활성화 여부, 수신/송신 설정이 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        'lldp run',
-                        f'interface {parameters["interface"]}',
-                        f'lldp {parameters["enabled"]}',
-                        f'lldp receive {parameters["receive"]}',
-                        f'lldp transmit {parameters["transmit"]}',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = [
-                        'show lldp',
-                        'show lldp neighbors'
-                    ]
-            
-            elif feature == 'Loopback':
-                if subtask == 'config':
-                    if not all(key in parameters for key in ['interface', 'enabled', 'interval']):
-                        return jsonify({'error': '인터페이스, Loopback-detection 활성화 여부, 검출 간격이 필요합니다.'}), 400
-                    commands = [
-                        'configure terminal',
-                        'loopback-detection enable',
-                        f'interface {parameters["interface"]}',
-                        f'loopback-detection {parameters["enabled"]}',
-                        f'loopback-detection interval-time {parameters["interval"]}',
-                        'end'
-                    ]
-                elif subtask == 'check':
-                    commands = ['show loopback-detection']
-            
-            if commands:
-                result = {'output': '\n'.join(commands)}
-                logger.info(f"반환할 결과: {result}")
-                return jsonify(result)
-            else:
-                logger.warning("생성된 명령어가 없습니다.")
-                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
-        
-        # LAYER2 작업 처리 (기존 코드)
-        elif task_type == 'LAYER2':
-            commands = []
-            
-            if feature == 'Link-Aggregation (Manual)':
-                if subtask == 'config':
-                    # 필수 파라미터 검증
-                    if not isinstance(parameters, dict):
-                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
-                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
-                        
-                    if 'group_id' not in parameters or 'interface_list' not in parameters:
-                        missing_params = []
-                        if 'group_id' not in parameters: missing_params.append('group_id')
-                        if 'interface_list' not in parameters: missing_params.append('interface_list')
-                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
-                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
-                        
-                    commands = [
-                        'configure terminal',
-                        f'link-aggregation {parameters["group_id"]} mode manual',
-                        f'interface gi {parameters["interface_list"]}',
-                        f'link-aggregation {parameters["group_id"]} manual',
-                        'end'
-                    ]
-                    logger.info(f"생성된 명령어: {commands}")
-                elif subtask == 'check':
-                    commands = [
-                        'show link-aggregation brief',
-                        f'show link-aggregation group {parameters.get("group_id", "1")}'
-                    ]
-                    logger.info(f"생성된 명령어: {commands}")
-            elif feature == 'Link-Aggregation (LACP)':
-                if subtask == 'config':
-                    # 필수 파라미터 검증
-                    if not isinstance(parameters, dict):
-                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
-                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
-                        
-                    if 'group_id' not in parameters or 'interface_list' not in parameters:
-                        missing_params = []
-                        if 'group_id' not in parameters: missing_params.append('group_id')
-                        if 'interface_list' not in parameters: missing_params.append('interface_list')
-                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
-                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
-                        
-                    commands = [
-                        'configure terminal',
-                        f'link-aggregation {parameters["group_id"]} mode lacp',
-                        f'interface gi {parameters["interface_list"]}',
-                        f'link-aggregation {parameters["group_id"]} active',
-                        'end'
-                    ]
-                    logger.info(f"생성된 명령어: {commands}")
-                elif subtask == 'check':
-                    commands = [
-                        'show link-aggregation brief',
-                        f'show link-aggregation group {parameters.get("group_id", "1")}'
-                    ]
-                    logger.info(f"생성된 명령어: {commands}")
-            elif feature == 'VLAN':
-                if subtask == 'config':
-                    # 필수 파라미터 검증
-                    if not isinstance(parameters, dict):
-                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
-                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
-                        
-                    if 'vlan_id' not in parameters or 'interface' not in parameters or 'mode' not in parameters:
-                        missing_params = []
-                        if 'vlan_id' not in parameters: missing_params.append('vlan_id')
-                        if 'interface' not in parameters: missing_params.append('interface')
-                        if 'mode' not in parameters: missing_params.append('mode')
-                        logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
-                        return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
-                    
+
+        # 필수 필드 검증
+        if not all([task_type, feature, subtask, config_mode]):
+            missing = [field for field, value in {
+                'taskType': task_type,
+                'feature': feature,
+                'subtask': subtask,
+                'configMode': config_mode
+            }.items() if not value]
+            logger.error(f"필수 필드 누락: {missing}")
+            return error_response(f"필수 필드가 누락되었습니다: {', '.join(missing)}")
+
+        logger.info(f"작업 실행 상세: [유형: {task_type}] [기능: {feature}] [서브태스크: {subtask}] [모드: {config_mode}]")
+        logger.debug(f"파라미터: {json.dumps(parameters, indent=2, ensure_ascii=False)}")
+
+        command_generator = CommandGenerator()
+        commands = []
+
+        try:
+            if task_type == 'LAYER2':
+                if feature == 'VLAN':
                     commands = [
                         'configure terminal',
                         f'vlan {parameters["vlan_id"]}',
-                        f'interface {parameters["interface"]}'
+                        f'name {parameters["vlan_name"]}',
+                        'exit'
                     ]
-                    
-                    if parameters['mode'] == 'access':
-                        commands.append(f'switchport access vlan {parameters["vlan_id"]}')
-                    elif parameters['mode'] == 'trunk':
-                        commands.extend([
-                            'switchport mode trunk',
-                            f'switchport trunk allowed vlan add {parameters["vlan_id"]}'
-                        ])
-                    
-                    commands.append('end')
-                    logger.info(f"생성된 명령어: {commands}")
-                elif subtask == 'check':
-                    commands = ['show vlan']
-                    if parameters.get('interface'):
-                        commands.append(f'show interface {parameters["interface"]} vlan status')
-                    logger.info(f"생성된 명령어: {commands}")
-            elif feature == 'Spanning-tree':
-                if subtask == 'config':
-                    # 필수 파라미터 검증
-                    if not isinstance(parameters, dict):
-                        logger.error(f"파라미터가 올바른 형식이 아닙니다. 받은 형식: {type(parameters)}")
-                        return jsonify({'error': '파라미터가 올바른 형식이 아닙니다.'}), 400
-
+                elif feature == 'Spanning-tree':
                     if config_mode == 'config(RSTP)':
-                        if 'instance_id' not in parameters or 'priority' not in parameters:
-                            missing_params = []
-                            if 'instance_id' not in parameters: missing_params.append('instance_id')
-                            if 'priority' not in parameters: missing_params.append('priority')
-                            logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
-                            return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
-                        
                         commands = [
                             'configure terminal',
                             'spanning-tree mode rstp',
-                            'spanning-tree enable',
-                            f'spanning-tree mst instance {parameters["instance_id"]} priority {parameters["priority"]}',
-                            'spanning-tree mode rapid-vst',
-                            'end'
+                            f'spanning-tree priority {parameters["priority"]}',
+                            'exit'
                         ]
                     elif config_mode == 'config(PVST+)':
-                        if 'vlan_id' not in parameters or 'priority' not in parameters:
-                            missing_params = []
-                            if 'vlan_id' not in parameters: missing_params.append('vlan_id')
-                            if 'priority' not in parameters: missing_params.append('priority')
-                            logger.error(f"필수 파라미터 누락: {', '.join(missing_params)}")
-                            return jsonify({'error': f"다음 필수 파라미터가 누락되었습니다: {', '.join(missing_params)}"}), 400
-                        
                         commands = [
                             'configure terminal',
-                            'spanning-tree mode rapid-vst',
-                            'spanning-tree enable',
+                            'spanning-tree mode pvst',
                             f'spanning-tree vlan {parameters["vlan_id"]} priority {parameters["priority"]}',
-                            'end'
+                            'exit'
                         ]
-                    logger.info(f"생성된 명령어: {commands}")
-                elif subtask == 'check':
+                # 다른 LAYER2 기능들에 대한 명령어 생성...
+
+            elif task_type == '시스템관리':
+                if feature == 'Hostname':
                     commands = [
-                        'show spanning-tree',
-                        'show spanning-tree detail',
-                        'show spanning-tree bpdu statistics'
+                        'configure terminal',
+                        f'hostname {parameters["hostname"]}',
+                        'exit'
                     ]
-                    logger.info(f"생성된 명령어: {commands}")
-            
-            if commands:
-                result = {'output': '\n'.join(commands)}
-                logger.info(f"반환할 결과: {result}")
-                return jsonify(result)
-            else:
-                logger.warning("생성된 명령어가 없습니다.")
-                return jsonify({'error': '지원되지 않는 작업입니다.'}), 400
-        
-        logger.warning(f"지원되지 않는 작업 유형: {task_type}")
-        return jsonify({'error': '지원되지 않는 작업 유형입니다.'}), 400
-        
+                # 다른 시스템관리 기능들에 대한 명령어 생성...
+
+            elif task_type == '네트워크관리':
+                if feature == 'SNMP':
+                    commands = [
+                        'configure terminal',
+                        f'snmp-server community {parameters["community"]} {parameters["access"]}',
+                        'exit'
+                    ]
+                # 다른 네트워크관리 기능들에 대한 명령어 생성...
+
+            # 생성된 명령어가 없으면 에러
+            if not commands:
+                logger.error(f"명령어를 생성할 수 없습니다: {task_type}/{feature}")
+                return error_response(f"해당 작업 유형({task_type}/{feature})에 대한 명령어를 생성할 수 없습니다.")
+
+            logger.info(f"생성된 명령어: {json.dumps(commands, indent=2, ensure_ascii=False)}")
+            return success_response({'commands': commands})
+
+        except KeyError as e:
+            logger.error(f"필수 파라미터 누락: {str(e)}")
+            return error_response(f"필수 파라미터가 누락되었습니다: {str(e)}")
+        except Exception as e:
+            logger.error(f"명령어 생성 중 오류: {str(e)}")
+            return error_response(f"명령어 생성 중 오류가 발생했습니다: {str(e)}")
+
     except Exception as e:
-        logger.error(f"작업 실행 실패: {str(e)}")
-        import traceback
-        logger.error(f"상세 오류: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"작업 실행 실패: {str(e)}", exc_info=True)
+        return error_response(str(e), 500)
 
 @bp.route('/api/tasks', methods=['GET'])
 def get_tasks():
